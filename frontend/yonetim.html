@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Yönetim · Yemekhane</title>
+  <link rel="stylesheet" href="/css/temel.css">
+  <link rel="stylesheet" href="/css/uygulama.css">
+</head>
+<body data-sayfa="yonetim">
+  <header id="ust"></header>
+
+  <main class="kapsayici">
+    <div class="sayfa-baslik">
+      <h1>Yönetici Paneli</h1>
+      <p>Menü bazında doluluk ve puanlar; menü oluşturma ve düzenleme.</p>
+    </div>
+
+    <div class="sekmeler" id="sekmeler" role="group" aria-label="Bölüm">
+      <button type="button" data-bolum="rapor" aria-pressed="true">Menüler</button>
+      <button type="button" data-bolum="form" aria-pressed="false">Yeni menü</button>
+    </div>
+
+    <p id="bildirim" class="bildirim" hidden></p>
+
+    <!-- Rapor -->
+    <section id="bolum-rapor">
+      <form id="filtre" class="filtre-izgara" onsubmit="return false">
+        <div class="alan tam">
+          <label for="f-yemekhane">Yemekhane</label>
+          <select id="f-yemekhane" name="yemekhane"><option value="">Tümü</option></select>
+        </div>
+        <div class="alan">
+          <label for="f-baslangic">Başlangıç</label>
+          <input id="f-baslangic" name="baslangic" type="date">
+        </div>
+        <div class="alan">
+          <label for="f-bitis">Bitiş</label>
+          <input id="f-bitis" name="bitis" type="date">
+        </div>
+      </form>
+      <div class="tablo-kart">
+        <table class="tablo">
+          <thead>
+            <tr><th>Tarih</th><th>Öğün</th><th>Yemekhane</th><th>Doluluk</th><th>Puan</th><th>Fiyat (öğr./pers.)</th><th></th></tr>
+          </thead>
+          <tbody id="rapor"><tr><td class="yukleniyor">Yükleniyor…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Menü formu (oluşturma ve düzenleme) -->
+    <section id="bolum-form" class="kart" hidden>
+      <h2 class="bolum-baslik" id="form-baslik">Yeni menü</h2>
+      <form id="menu-formu" novalidate>
+        <div class="form-izgara">
+          <div class="alan tam">
+            <label for="m-yemekhane">Yemekhane</label>
+            <select id="m-yemekhane" name="yemekhane_id"></select>
+          </div>
+          <div class="alan">
+            <label for="m-tarih">Tarih</label>
+            <input id="m-tarih" name="tarih" type="date">
+          </div>
+          <div class="alan">
+            <label for="m-ogun">Öğün</label>
+            <select id="m-ogun" name="ogun_id"></select>
+          </div>
+          <div class="alan">
+            <label for="m-ogrenci">Öğrenci fiyatı (TL)</label>
+            <input id="m-ogrenci" name="ogrenci_fiyati" type="number" step="0.01" inputmode="decimal">
+          </div>
+          <div class="alan">
+            <label for="m-personel">Personel fiyatı (TL)</label>
+            <input id="m-personel" name="personel_fiyati" type="number" step="0.01" inputmode="decimal">
+          </div>
+        </div>
+
+        <div id="yemek-secimi"></div>
+
+        <div class="form-eylem">
+          <button type="submit" class="dugme" id="kaydet">Menüyü oluştur</button>
+          <button type="button" class="dugme dugme-ikincil" id="vazgec" hidden>Vazgeç</button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/ortak.js"></script>
+  <script src="/js/yonetim.js"></script>
+</body>
+</html>

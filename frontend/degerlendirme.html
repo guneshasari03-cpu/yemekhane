@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Değerlendirme · Yemekhane</title>
+  <link rel="stylesheet" href="/css/temel.css">
+  <link rel="stylesheet" href="/css/uygulama.css">
+</head>
+<body data-sayfa="degerlendirme">
+  <header id="ust"></header>
+
+  <main class="kapsayici">
+    <div class="sayfa-baslik">
+      <h1>Değerlendirme</h1>
+      <p>Kullandığınız menülere 1–5 arası puan verin.</p>
+    </div>
+
+    <p id="bildirim" class="bildirim" hidden></p>
+
+    <h2 class="bolum-baslik">Değerlendirme bekleyenler</h2>
+    <div id="bekleyenler" class="liste" aria-live="polite">
+      <p class="yukleniyor">Yükleniyor…</p>
+    </div>
+
+    <h2 class="bolum-baslik" style="margin-top:2rem">Verdiğim puanlar</h2>
+    <div id="verilenler" class="liste"></div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/ortak.js"></script>
+  <script src="/js/degerlendirme.js"></script>
+</body>
+</html>
