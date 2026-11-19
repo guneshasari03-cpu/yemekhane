@@ -271,3 +271,181 @@ main { flex: 1; padding-block: 1.25rem 3rem; }
   .yemek-listesi { padding-inline: 1.5rem; }
   .menu-ozet { padding-inline: 1.5rem; }
 }
+
+/* =====================================================================
+   Aşama 2 · 2. parça: haftalık menü, rezervasyonlarım, bakiye
+   ===================================================================== */
+
+/* ---------- Durum rozetleri ---------- */
+.durum {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.durum-aktif      { background: var(--basari-zemin); color: var(--basari); }
+.durum-kullanildi { background: var(--bilgi-zemin);  color: var(--bilgi); }
+.durum-iptal      { background: var(--zemin);        color: var(--metin-soluk); }
+
+/* Kart içi kısa mesaj (rezervasyon sonucu vb.) */
+.satir-mesaj { font-size: var(--boyut-kucuk); margin: 0.5rem 0 0; font-weight: 600; }
+.satir-mesaj.hata   { color: var(--hata); }
+.satir-mesaj.basari { color: var(--basari); }
+
+/* ---------- Hafta gezinmesi ---------- */
+.hafta-gezinme {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.hafta-gezinme .dugme { padding: 0.5rem 0.75rem; min-height: 40px; font-size: var(--boyut-kucuk); }
+.hafta-gezinme strong { font-size: var(--boyut-kucuk); text-align: center; }
+
+/* ---------- Haftalık menü ---------- */
+.gun + .gun { margin-top: 1.5rem; }
+.gun-baslik {
+  font-size: 1rem;
+  margin: 0 0 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.gun-baslik .etiket { background: var(--vurgu); color: var(--metin); }
+
+.ogun-izgara { display: grid; gap: 0.75rem; grid-template-columns: 1fr; }
+
+.ogun-kart {
+  background: var(--yuzey);
+  border-radius: var(--kose);
+  box-shadow: var(--golge);
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.ogun-kart.gecmis { opacity: .7; }
+.ogun-kart-ust { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
+.ogun-kart-ust h3 { font-size: 1.05rem; margin: 0; }
+.ogun-kart-ust .fiyat { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ogun-yemekler { margin: 0; font-size: var(--boyut-kucuk); color: var(--metin-soluk); }
+.ogun-bilgi {
+  display: flex;
+  gap: 1.25rem;
+  margin: 0;
+  font-size: var(--boyut-kucuk);
+}
+.ogun-bilgi dt { color: var(--metin-soluk); font-size: 0.75rem; }
+.ogun-bilgi dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ogun-eylem { margin-top: auto; }
+.ogun-eylem .dugme { width: 100%; }
+.ogun-kart .detay { font-size: var(--boyut-kucuk); }
+
+/* ---------- Sekmeler (filtre) ---------- */
+.sekmeler {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  margin-bottom: 1rem;
+  padding-bottom: 0.25rem;
+}
+.sekmeler button {
+  border: 1px solid var(--cizgi);
+  background: var(--yuzey);
+  color: var(--metin);
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  min-height: 38px;
+  font-weight: 600;
+  font-size: var(--boyut-kucuk);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sekmeler button[aria-pressed="true"] { background: var(--ana); border-color: var(--ana); color: #fff; }
+
+/* ---------- Rezervasyonlarım ---------- */
+.liste { display: grid; gap: 0.75rem; }
+.rez-kart {
+  background: var(--yuzey);
+  border-radius: var(--kose);
+  box-shadow: var(--golge);
+  padding: 0.9rem 1rem;
+}
+.rez-ust { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; }
+.rez-ust strong { display: block; }
+.rez-alt { margin: 0.35rem 0 0; font-size: var(--boyut-kucuk); color: var(--metin-soluk); }
+.rez-eylem { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+.rez-eylem:empty { display: none; }
+.rez-eylem .dugme { padding: 0.45rem 0.9rem; min-height: 40px; font-size: var(--boyut-kucuk); }
+
+.bos-durum {
+  text-align: center;
+  color: var(--metin-soluk);
+  padding: 2rem 1rem;
+  background: var(--yuzey);
+  border-radius: var(--kose);
+  box-shadow: var(--golge);
+}
+
+/* ---------- Bakiye ---------- */
+.bakiye-kart {
+  background: var(--ana-koyu);
+  color: #fff;
+  border-radius: var(--kose);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+.bakiye-kart p { margin: 0; color: rgba(255, 255, 255, .8); font-size: var(--boyut-kucuk); }
+.bakiye-kart .tutar {
+  display: block;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--vurgu);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  margin-top: 0.15rem;
+}
+
+.hizli-tutarlar { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.75rem; }
+.hizli-tutarlar button {
+  flex: 1;
+  min-width: 64px;
+  border: 1px solid var(--cizgi);
+  background: var(--yuzey);
+  border-radius: var(--kose);
+  min-height: 40px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.hizli-tutarlar button:hover { border-color: var(--ana); color: var(--ana); }
+.yukle-satir { display: flex; gap: 0.5rem; }
+.yukle-satir input { flex: 1; min-width: 0; }
+
+.hareketler { list-style: none; margin: 0; padding: 0; }
+.hareket {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--zemin);
+}
+.hareket:last-child { border-bottom: 0; }
+.hareket-ad { font-weight: 600; }
+.hareket-zaman { display: block; font-size: 0.8rem; color: var(--metin-soluk); }
+.hareket-tutar { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hareket-tutar.arti  { color: var(--basari); }
+.hareket-tutar.eksi  { color: var(--hata); }
+.hareket.yeni { animation: yeniHareket 1.6s ease-out; }
+@keyframes yeniHareket { from { background: var(--basari-zemin); } to { background: transparent; } }
+
+.bolum-baslik { font-size: 1.05rem; margin: 0 0 0.5rem; }
+.iki-sutun { display: grid; gap: 1rem; }
+
+@media (min-width: 640px) {
+  .ogun-izgara { grid-template-columns: repeat(3, 1fr); }
+  .iki-sutun { grid-template-columns: 1fr 1.4fr; align-items: start; }
+}

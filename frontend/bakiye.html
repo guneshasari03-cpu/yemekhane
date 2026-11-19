@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bakiye · Yemekhane</title>
+  <link rel="stylesheet" href="/css/temel.css">
+  <link rel="stylesheet" href="/css/uygulama.css">
+</head>
+<body data-sayfa="bakiye">
+  <header id="ust"></header>
+
+  <main class="kapsayici">
+    <div class="sayfa-baslik">
+      <h1>Bakiye</h1>
+    </div>
+
+    <p id="bildirim" class="bildirim" hidden></p>
+
+    <div class="iki-sutun">
+      <div>
+        <div class="bakiye-kart">
+          <p>Güncel bakiye</p>
+          <span class="tutar" id="bakiye">—</span>
+        </div>
+
+        <section class="kart">
+          <h2 class="bolum-baslik">Bakiye yükle</h2>
+          <form id="yukle-formu" novalidate>
+            <div class="hizli-tutarlar" id="hizli">
+              <button type="button" data-tutar="50">50 TL</button>
+              <button type="button" data-tutar="100">100 TL</button>
+              <button type="button" data-tutar="200">200 TL</button>
+              <button type="button" data-tutar="500">500 TL</button>
+            </div>
+            <label for="tutar">Tutar (TL)</label>
+            <div class="yukle-satir">
+              <input id="tutar" name="tutar" type="number" inputmode="decimal" step="0.01" placeholder="Örn. 150">
+              <button type="submit" class="dugme" id="yukle-dugme">Yükle</button>
+            </div>
+            <p class="soluk kucuk" style="margin:.5rem 0 0">Tek seferde 10–1000 TL yüklenebilir.</p>
+          </form>
+        </section>
+      </div>
+
+      <section class="kart">
+        <h2 class="bolum-baslik">Hareket geçmişi</h2>
+        <ul class="hareketler" id="hareketler" aria-live="polite">
+          <li class="yukleniyor">Yükleniyor…</li>
+        </ul>
+      </section>
+    </div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/ortak.js"></script>
+  <script src="/js/bakiye.js"></script>
+</body>
+</html>
