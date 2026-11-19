@@ -2,7 +2,7 @@
 
 **Ders:** Web Teknolojileri
 **Öğrenci:** Hasari Güneş · ÖĞRENCİ NO
-**Depo:** https://github.com/KULLANICI/yemekhane
+**Depo:** https://github.com/guneshasari03-cpu/yemekhane
 
 **Seçilen mimari: Web API + arayüz.**
 Uygulama Node.js 22 + Express ile yazılmıştır ve yalnızca JSON döner. HTML5 + CSS3 arayüz
@@ -220,6 +220,218 @@ PONG
 ---
 
 ## Aşama 2 · Uygulama
+
+### 2.1 Mimari ve katmanlar
+
+Seçilen yol **Web API + arayüz**dür. `uygulama` servisi (Node.js 22 + Express 5) yalnızca JSON
+döner; `frontend/` klasöründeki HTML5 + CSS3 sayfalar Apache'den sunulur ve veriyi `fetch` ile
+alır (React vb. çerçeve kullanılmamıştır). Apache `/api/` ile başlayan istekleri
+`http://uygulama:8000`'e iletir. Uygulama `docker-compose.yml`'ye `uygulama` servisi olarak
+eklenmiş, `wget` ile `/api/` adresini yoklayan bir healthcheck verilmiştir.
+
+```
+uygulama/src/
+├── sunucu.js              Express kurulumu, istek günlüğü, hata yakalayıcı
+├── rotalar.js             Tüm yollar: yol -> middleware -> denetleyici
+├── ara/                   Middleware: kimlik.js (oturum, yönetici), hataYakala.js
+├── denetleyiciler/        HTTP katmanı: girdiyi okur/doğrular, yanıtı yazar. SQL YOK.
+├── servisler/             İş kuralları (fiyat seçimi, "yalnızca kullanılan menü puanlanır" vb.)
+├── veri/                  Veri katmanı: SQL yalnızca burada. baglanti.js iki havuz tutar.
+└── oturum/                Oturum deposu (Aşama 2: bellek, Aşama 3: Redis)
+
+frontend/
+├── index.html … yonetim.html   7 ekran
+├── js/api.js              Tüm fetch çağrıları; sunucunun {hata} mesajını Error'a çevirir
+├── js/ortak.js            Üst çubuk, gezinme, biçimlendirme (iş kuralı yok, yalnız gösterim)
+└── css/uygulama.css       Mobil önce yazılmış stiller
+```
+
+Kurallar: **denetleyicilerde SQL yoktur** (yalnızca `veri/` klasöründe), **arayüz kodunda iş
+kuralı yoktur**. Fiyatın role göre seçimi, son saatin geçip geçmediği, iptal edilebilirlik ve
+değerlendirilebilirlik kararları API'den hazır gelir; arayüz yalnızca bunları gösterir. Bakiye
+yükleme sınırı (10–1000 TL) gibi kurallar stored procedure'dedir ve arayüzde tekrar edilmez.
+
+### 2.2 Bir isteğin yolu: rezervasyon
+
+`POST /api/rezervasyonlar` isteğinin uygulama içindeki yolu:
+
+**1. Rota** (`rotalar.js`): önce oturum kontrolü, sonra denetleyici.
+
+```js
+r.post('/rezervasyonlar', girisGerekli, rezervasyon.olustur);
+```
+
+**2. Middleware** (`ara/kimlik.js`): HttpOnly çerezdeki token ile oturumu bulur, `req.kullanici`yı doldurur; yoksa 401.
+
+**3. Denetleyici** (`denetleyiciler/rezervasyonDenetleyici.js`): girdiyi doğrular, veri katmanını çağırır, yanıtı yazar.
+
+```js
+async function olustur(req, res) {
+  const menuId = dogrula.pozitifTamsayi(req.body?.menu_id, 'Menü');
+  const sonuc = await rezervasyonDeposu.rezervasyonYap(req.kullanici.id, menuId);
+  res.status(201).json(sonuc);   // { rezervasyon_id, ucret, bakiye }
+}
+```
+
+**4. Veri katmanı** (`veri/rezervasyonDeposu.js` → `veri/baglanti.js`): yordam her zaman **kaynakta** çağrılır.
+
+```js
+async function rezervasyonYap(kullaniciId, menuId) {
+  return db.yordam('sp_rezervasyon_yap', [kullaniciId, menuId]);
+}
+
+// baglanti.js
+async function yordam(ad, parametreler = []) {
+  const sql = `CALL ${ad}(${parametreler.map(() => '?').join(', ')})`;
+  const [sonuclar] = await yazmaHavuzu.query(sql, parametreler);   // mysql-primary
+  return sonuclar[0][0];
+}
+```
+
+**5. Yanıt**: Başarıda `201` ve yordamın döndürdüğü `{ rezervasyon_id, ucret, bakiye }`. Yordam
+`SIGNAL SQLSTATE '45000'` ile hata verirse (ör. "Bakiye yetersiz.") hata `ara/hataYakala.js`'e
+düşer ve **mesaj değiştirilmeden** `400 {"hata":"Bakiye yetersiz."}` olarak döner:
+
+```js
+if (hata.errno === 1644 || hata.sqlState === '45000') {
+  return res.status(400).json({ hata: hata.sqlMessage || hata.message });
+}
+```
+
+Arayüzde `js/api.js` bu mesajı `Error` yapar, `js/hafta.js` kartın altında kırmızı olarak gösterir.
+CHECK ihlali gibi beklenmeyen veritabanı hataları ise kullanıcıya gösterilmez; günlüğe yazılır ve
+genel bir "Beklenmeyen bir hata oluştu" mesajı döner.
+
+### 2.3 Stored procedure kullanımı
+
+| İşlem | Uç nokta | Yordam |
+|---|---|---|
+| Rezervasyon | `POST /api/rezervasyonlar` | `sp_rezervasyon_yap` |
+| İptal | `DELETE /api/rezervasyonlar/:id` | `sp_rezervasyon_iptal` |
+| Bakiye yükleme | `POST /api/bakiye` | `sp_bakiye_yukle` |
+
+Yordamlar kendi transaction'larını açtığı için uygulama bunları `BEGIN/COMMIT` ile sarmaz.
+Yordamı olmayan çok adımlı yazmalar (yönetici panelinde menü oluşturma/düzenleme:
+`menuler` + `menu_yemekleri`) `baglanti.js`'teki `islem()` ile tek transaction içinde yapılır;
+hata olursa `ROLLBACK` edilir.
+
+### 2.4 Okuma / yazma ayrımı
+
+`veri/baglanti.js` iki bağlantı havuzu tutar: `yazmaHavuzu` → `mysql-primary`,
+`okumaHavuzu` → `mysql-replica`. Veri katmanı dört fonksiyondan birini kullanır ve her sorgu
+günlüğe hangi sunucuya gittiğiyle yazılır:
+
+| Fonksiyon | Sunucu | Kullanım |
+|---|---|---|
+| `oku()` | replika | Menüler, haftalık liste, rezervasyon listesi, hareket geçmişi, yönetici raporu |
+| `birincildenOku()` | kaynak | Güncel bakiye, yazmadan hemen önce/sonra okunan veri |
+| `yaz()`, `islem()` | kaynak | INSERT / UPDATE / DELETE |
+| `yordam()` | kaynak | Stored procedure çağrıları |
+
+Uygulama günlüğünden (`rapor/asama2-gunluk.txt`) haftalık menüden rezervasyon, iptal ve
+bakiye yükleme akışı:
+
+```
+[sql:okuma/replika] SELECT d.menu_id, d.tarih, d.ogun_id, d.ogun, d.kapasite, d.bos_yer, …
+GET /api/menuler/hafta?yemekhane=1&baslangic=2026-11-19 -> 200 (3 ms)
+[sql:yazma/kaynak] CALL sp_rezervasyon_yap(?, ?)
+POST /api/rezervasyonlar -> 201 (7 ms)
+[sql:okuma/kaynak] SELECT bakiye FROM kullanicilar WHERE id = ?
+GET /api/ben -> 200 (2 ms)
+[sql:okuma/replika] SELECT r.id, r.menu_id, r.durum, r.ucret, r.olusturma, …
+GET /api/rezervasyonlar -> 200 (3 ms)
+[sql:yazma/kaynak] CALL sp_rezervasyon_iptal(?, ?)
+DELETE /api/rezervasyonlar/299 -> 200 (7 ms)
+[sql:okuma/kaynak] SELECT bakiye FROM kullanicilar WHERE id = ?
+[sql:okuma/replika] SELECT h.id, h.tur, h.tutar, h.aciklama, h.olusturma, … FROM bakiye_hareket…
+GET /api/bakiye -> 200 (3 ms)
+[sql:yazma/kaynak] CALL sp_bakiye_yukle(?, ?)
+[sql:okuma/kaynak] SELECT h.id, h.tur, h.tutar, h.aciklama, h.olusturma, … FROM bakiye_hareket…
+POST /api/bakiye -> 201 (8 ms)
+```
+
+Yönetici panelinde menü düzenleme de aynı ayrımı izler: rapor replikadan, düzenleme formu
+(az önce kaydedilmiş olabileceği için) kaynaktan okunur, kayıt kaynakta tek transaction'dır:
+
+```
+[sql:okuma/replika] SELECT d.menu_id, d.tarih, … d.rezerve, d.bos_yer, d…   (doluluk + puan raporu)
+[sql:okuma/kaynak]  SELECT id AS menu_id, … FROM menuler WHERE id = ?        (düzenleme formu)
+[sql:yazma/kaynak]  SELECT yemekhane_id, tarih, ogun_id FROM menuler WHERE id = ? FOR UPDATE
+[sql:yazma/kaynak]  UPDATE menuler SET ogrenci_fiyati = ?, personel_fiyati = ? WHERE id = ?
+[sql:yazma/kaynak]  DELETE FROM menu_yemekleri WHERE menu_id = ?
+[sql:yazma/kaynak]  INSERT INTO menu_yemekleri (menu_id, yemek_id) VALUES ?
+PUT /api/yonetim/menuler/79 -> 200 (12 ms)
+```
+
+### 2.5 Bakiye neden kaynaktan okunur? (replikasyon gecikmesi)
+
+MySQL replikasyonu **asenkrondur**: kaynak bir transaction'ı commit edip istemciye yanıt
+verdikten sonra değişiklik binlog üzerinden replikaya gönderilir ve orada ayrıca uygulanır. Bu
+yüzden kaynakta commit ile replikada görünür olma arasında kısa bir gecikme vardır
+(replikasyon gecikmesi). Gecikme normalde milisaniyeler düzeyindedir, ancak replika yük altındaysa,
+ağ yavaşsa ya da replika Aşama 1'de olduğu gibi bir süre kapalı kaldıysa saniyelere, hatta
+dakikalara çıkabilir. Rezervasyondan hemen sonra bakiye replikadan okunursa kullanıcı, parası
+düşülmüş olduğu hâlde eski bakiyeyi görebilir; bu hem kafa karıştırır hem de aynı parayla ikinci
+bir işlem yapabileceğini düşündürür. Bu nedenle uygulamada **bakiye her zaman kaynaktan
+okunur**: rezervasyon, iptal ve yükleme yanıtındaki bakiye yordamın kaynakta hesapladığı
+değerdir; üst çubuktaki bakiye (`GET /api/ben`) ve Bakiye ekranındaki güncel bakiye de
+`birincildenOku()` ile kaynaktan gelir. Aynı gerekçeyle bakiye yüklemesinden sonra yeni hareket
+satırı kaynaktan okunup yanıta eklenir; arayüz rezervasyon sonrasında listeyi replikadan yeniden
+çekmek yerine ilgili kartı yerinde günceller. Gecikmenin zararsız olduğu listeler (menüler,
+geçmiş hareketler, yönetici raporu) replikadan okunarak kaynağın yükü azaltılır.
+
+### 2.6 Ekranlar
+
+Tüm ekranlar mobil önce yazılmıştır: varsayılan stiller 400 px genişlik içindir, `@media
+(min-width: 640px)` ve `720px` ile geniş ekranda sütunlara açılır. Gezinme çubuğu telefonda yana
+kayar, yönetici panelindeki tablo telefonda kartlara dönüşür, dokunma hedefleri en az 40–44 px'tir.
+
+| # | Ekran | Dosyalar | API |
+|---|---|---|---|
+| 1 | Giriş / çıkış | `index.html`, `js/giris.js` | `POST/DELETE /api/oturum`, `GET /api/ben` |
+| 2 | Günün menüsü | `menu.html`, `js/menu.js` | `GET /api/menu` |
+| 3 | Haftalık menü ve rezervasyon | `hafta.html`, `js/hafta.js` | `GET /api/menuler/hafta`, `POST /api/rezervasyonlar` |
+| 4 | Rezervasyonlarım | `rezervasyonlarim.html`, `js/rezervasyonlarim.js` | `GET /api/rezervasyonlar`, `DELETE /api/rezervasyonlar/:id` |
+| 5 | Bakiye | `bakiye.html`, `js/bakiye.js` | `GET/POST /api/bakiye` |
+| 6 | Değerlendirme | `degerlendirme.html`, `js/degerlendirme.js` | `GET/POST /api/degerlendirmeler` |
+| 7 | Yönetici paneli | `yonetim.html`, `js/yonetim.js` | `GET/POST/PUT /api/yonetim/menuler`, `GET /api/yonetim/yemekler` |
+
+Giriş: şifre `bcryptjs.compare` ile `$2a$` özetine karşı doğrulanır; hatalı girişte hangi bilginin
+yanlış olduğu söylenmez. Oturum token'ı `HttpOnly` + `SameSite=Strict` çerezde taşınır. Arayüze
+yazılan her metin `esc()` ile kaçırılır.
+
+**1. Giriş** (hatalı şifre denemesi)
+
+![Giriş](ekran/asama2-giris.png)
+
+**2. Günün menüsü**: yemekler, kategori, kalori, vejetaryen ve alerjen etiketleri, toplam kalori, role göre fiyat
+
+![Günün menüsü](ekran/asama2-menu.png)
+
+**3. Haftalık menü**: boş yer, role göre fiyat, son saati geçen öğünde pasif düğme
+
+![Haftalık menü](ekran/asama2-hafta.png)
+
+**4. Rezervasyonlarım**: aktif / kullanıldı / iptal durumları, süresi dolmamışsa iptal
+
+![Rezervasyonlarım](ekran/asama2-rezervasyonlarim.png)
+
+**5. Bakiye**: güncel bakiye, hareket geçmişi, yükleme; sınır dışı tutarda yordamın mesajı
+
+![Bakiye](ekran/asama2-bakiye.png)
+
+**6. Değerlendirme**: kullanılmış menüye 1–5 yıldız ve yorum
+
+![Değerlendirme](ekran/asama2-degerlendirme.png)
+
+**7. Yönetici paneli**: menü bazında doluluk ve ortalama puan, menü düzenleme
+
+![Yönetici paneli](ekran/asama2-yonetim.png)
+
+**Telefon genişliği (400 px)**: bakiyesi 12,50 TL olan `ayse.demir` hesabıyla rezervasyon
+denemesi; yordamın "Bakiye yetersiz." mesajı kartın altında gösterilir.
+
+![Telefon genişliği](ekran/asama2-telefon.png)
 
 ## Aşama 3 · Redis
 

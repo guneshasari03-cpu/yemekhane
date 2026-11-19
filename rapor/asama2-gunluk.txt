@@ -1,0 +1,103 @@
+uygulama-1  | Yemekhane API 8000 portunda çalışıyor
+uygulama-1  | Yazma: mysql-primary  Okuma: mysql-replica
+uygulama-1  | GET /api/ben -> 401 (3 ms)
+uygulama-1  | GET /api/ben -> 401 (1 ms)
+uygulama-1  | [sql:okuma/replika] SELECT id, ad, soyad, eposta, sifre_hash, rol, aktif FROM kullanicilar WHERE eposta = ?
+uygulama-1  | POST /api/oturum -> 200 (83 ms)
+uygulama-1  | [sql:okuma/kaynak] SELECT bakiye FROM kullanicilar WHERE id = ?
+uygulama-1  | GET /api/ben -> 304 (4 ms)
+uygulama-1  | [sql:okuma/replika] SELECT id, ad, konum, kapasite FROM yemekhaneler ORDER BY id
+uygulama-1  | [sql:okuma/replika] SELECT id, ad, sira, TIME_FORMAT(son_saat, '%H:%i') AS son_saat FROM ogunler ORDER BY sira
+uygulama-1  | GET /api/yemekhaneler -> 304 (3 ms)
+uygulama-1  | GET /api/ogunler -> 304 (4 ms)
+uygulama-1  | [sql:okuma/replika] SELECT menu_id, tarih, yemekhane_id, yemekhane, ogun_id, ogun, rezervasyon_son, ogrenci_fiyati, personel_fiyat
+uygulama-1  | GET /api/menu?yemekhane=1&tarih=2026-11-19&ogun=2 -> 304 (3 ms)
+uygulama-1  | [sql:okuma/kaynak] SELECT bakiye FROM kullanicilar WHERE id = ?
+uygulama-1  | GET /api/ben -> 304 (1 ms)
+uygulama-1  | [sql:okuma/replika] SELECT r.menu_id, m.tarih, o.ad AS ogun, yh.ad AS yemekhane, (SELECT GROUP_CONCAT(y.ad ORDER BY k.sira, y.ad S
+uygulama-1  | [sql:okuma/replika] SELECT d.id, d.menu_id, d.puan, d.yorum, d.olusturma, m.tarih, o.ad AS ogun, yh.ad AS yemekhane, (SELECT GROUP
+uygulama-1  | GET /api/degerlendirmeler -> 200 (3 ms)
+uygulama-1  | [sql:okuma/kaynak] SELECT bakiye FROM kullanicilar WHERE id = ?
+uygulama-1  | GET /api/ben -> 200 (2 ms)
+uygulama-1  | [sql:okuma/replika] SELECT r.menu_id, m.tarih, o.ad AS ogun, yh.ad AS yemekhane, (SELECT GROUP_CONCAT(y.ad ORDER BY k.sira, y.ad S
+uygulama-1  | [sql:okuma/replika] SELECT d.id, d.menu_id, d.puan, d.yorum, d.olusturma, m.tarih, o.ad AS ogun, yh.ad AS yemekhane, (SELECT GROUP
+uygulama-1  | GET /api/degerlendirmeler -> 304 (3 ms)
+uygulama-1  | [sql:okuma/kaynak] SELECT 1 FROM rezervasyonlar WHERE kullanici_id = ? AND menu_id = ? AND durum = 'kullanildi'
+uygulama-1  | [sql:yazma/kaynak] INSERT INTO degerlendirmeler (kullanici_id, menu_id, puan, yorum) VALUES (?, ?, ?, ?)
+uygulama-1  | POST /api/degerlendirmeler -> 201 (14 ms)
+uygulama-1  | DELETE /api/oturum -> 204 (2 ms)
+uygulama-1  | GET /api/ben -> 401 (0 ms)
+uygulama-1  | [sql:okuma/replika] SELECT id, ad, soyad, eposta, sifre_hash, rol, aktif FROM kullanicilar WHERE eposta = ?
+uygulama-1  | POST /api/oturum -> 200 (62 ms)
+uygulama-1  | [sql:okuma/kaynak] SELECT bakiye FROM kullanicilar WHERE id = ?
+uygulama-1  | GET /api/ben -> 200 (1 ms)
+uygulama-1  | [sql:okuma/replika] SELECT id, ad, konum, kapasite FROM yemekhaneler ORDER BY id
+uygulama-1  | [sql:okuma/replika] SELECT id, ad, sira, TIME_FORMAT(son_saat, '%H:%i') AS son_saat FROM ogunler ORDER BY sira
+uygulama-1  | GET /api/yemekhaneler -> 304 (1 ms)
+uygulama-1  | GET /api/ogunler -> 304 (1 ms)
+uygulama-1  | [sql:okuma/replika] SELECT menu_id, tarih, yemekhane_id, yemekhane, ogun_id, ogun, rezervasyon_son, ogrenci_fiyati, personel_fiyat
+uygulama-1  | GET /api/menu?yemekhane=1&tarih=2026-11-19&ogun=2 -> 200 (3 ms)
+uygulama-1  | [sql:okuma/kaynak] SELECT bakiye FROM kullanicilar WHERE id = ?
+uygulama-1  | GET /api/ben -> 304 (2 ms)
+uygulama-1  | [sql:okuma/replika] SELECT id, ad, konum, kapasite FROM yemekhaneler ORDER BY id
+uygulama-1  | [sql:okuma/replika] SELECT y.id, y.ad, y.kalori, y.vejetaryen, k.id AS kategori_id, k.ad AS kategori, k.sira AS kategori_sira FROM
+uygulama-1  | GET /api/yemekhaneler -> 304 (2 ms)
+uygulama-1  | GET /api/yonetim/yemekler -> 200 (3 ms)
+uygulama-1  | [sql:okuma/replika] SELECT id, ad, sira, TIME_FORMAT(son_saat, '%H:%i') AS son_saat FROM ogunler ORDER BY sira
+uygulama-1  | GET /api/ogunler -> 304 (1 ms)
+uygulama-1  | [sql:okuma/replika] SELECT d.menu_id, d.tarih, d.yemekhane_id, d.yemekhane, d.ogun_id, d.ogun, d.kapasite, d.rezerve, d.bos_yer, d
+uygulama-1  | GET /api/yonetim/menuler?baslangic=2026-11-12&bitis=2026-11-25 -> 200 (5 ms)
+uygulama-1  | [sql:okuma/kaynak] SELECT id AS menu_id, yemekhane_id, tarih, ogun_id, ogrenci_fiyati, personel_fiyati FROM menuler WHERE id = ?
+uygulama-1  | [sql:okuma/kaynak] SELECT yemek_id FROM menu_yemekleri WHERE menu_id = ? ORDER BY yemek_id
+uygulama-1  | GET /api/yonetim/menuler/79 -> 200 (9 ms)
+uygulama-1  | [sql:yazma/kaynak] SELECT yemekhane_id, tarih, ogun_id FROM menuler WHERE id = ? FOR UPDATE
+uygulama-1  | [sql:yazma/kaynak] UPDATE menuler SET ogrenci_fiyati = ?, personel_fiyati = ? WHERE id = ?
+uygulama-1  | [sql:yazma/kaynak] DELETE FROM menu_yemekleri WHERE menu_id = ?
+uygulama-1  | [sql:yazma/kaynak] INSERT INTO menu_yemekleri (menu_id, yemek_id) VALUES ?
+uygulama-1  | PUT /api/yonetim/menuler/79 -> 200 (12 ms)
+uygulama-1  | [sql:okuma/replika] SELECT d.menu_id, d.tarih, d.yemekhane_id, d.yemekhane, d.ogun_id, d.ogun, d.kapasite, d.rezerve, d.bos_yer, d
+uygulama-1  | GET /api/yonetim/menuler?baslangic=2026-11-12&bitis=2026-11-25 -> 304 (4 ms)
+uygulama-1  | [sql:okuma/kaynak] SELECT id AS menu_id, yemekhane_id, tarih, ogun_id, ogrenci_fiyati, personel_fiyati FROM menuler WHERE id = ?
+uygulama-1  | [sql:okuma/kaynak] SELECT yemek_id FROM menu_yemekleri WHERE menu_id = ? ORDER BY yemek_id
+uygulama-1  | GET /api/yonetim/menuler/82 -> 200 (2 ms)
+uygulama-1  | [sql:yazma/kaynak] SELECT yemekhane_id, tarih, ogun_id FROM menuler WHERE id = ? FOR UPDATE
+uygulama-1  | [sql:yazma/kaynak] UPDATE menuler SET ogrenci_fiyati = ?, personel_fiyati = ? WHERE id = ?
+uygulama-1  | [sql:yazma/kaynak] DELETE FROM menu_yemekleri WHERE menu_id = ?
+uygulama-1  | [sql:yazma/kaynak] INSERT INTO menu_yemekleri (menu_id, yemek_id) VALUES ?
+uygulama-1  | PUT /api/yonetim/menuler/82 -> 200 (8 ms)
+uygulama-1  | [sql:okuma/replika] SELECT d.menu_id, d.tarih, d.yemekhane_id, d.yemekhane, d.ogun_id, d.ogun, d.kapasite, d.rezerve, d.bos_yer, d
+uygulama-1  | GET /api/yonetim/menuler?baslangic=2026-11-12&bitis=2026-11-25 -> 200 (5 ms)
+uygulama-1  | DELETE /api/oturum -> 204 (1 ms)
+uygulama-1  | GET /api/ben -> 401 (1 ms)
+uygulama-1  | [sql:okuma/replika] SELECT id, ad, soyad, eposta, sifre_hash, rol, aktif FROM kullanicilar WHERE eposta = ?
+uygulama-1  | POST /api/oturum -> 200 (56 ms)
+uygulama-1  | [sql:okuma/kaynak] SELECT bakiye FROM kullanicilar WHERE id = ?
+uygulama-1  | GET /api/ben -> 200 (1 ms)
+uygulama-1  | [sql:okuma/replika] SELECT id, ad, konum, kapasite FROM yemekhaneler ORDER BY id
+uygulama-1  | [sql:okuma/replika] SELECT id, ad, sira, TIME_FORMAT(son_saat, '%H:%i') AS son_saat FROM ogunler ORDER BY sira
+uygulama-1  | GET /api/yemekhaneler -> 304 (1 ms)
+uygulama-1  | GET /api/ogunler -> 304 (2 ms)
+uygulama-1  | [sql:okuma/replika] SELECT menu_id, tarih, yemekhane_id, yemekhane, ogun_id, ogun, rezervasyon_son, ogrenci_fiyati, personel_fiyat
+uygulama-1  | GET /api/menu?yemekhane=1&tarih=2026-11-19&ogun=2 -> 200 (3 ms)
+uygulama-1  | [sql:okuma/kaynak] SELECT bakiye FROM kullanicilar WHERE id = ?
+uygulama-1  | GET /api/ben -> 304 (1 ms)
+uygulama-1  | [sql:okuma/replika] SELECT id, ad, konum, kapasite FROM yemekhaneler ORDER BY id
+uygulama-1  | GET /api/yemekhaneler -> 304 (2 ms)
+uygulama-1  | [sql:okuma/replika] SELECT d.menu_id, d.tarih, d.ogun_id, d.ogun, d.kapasite, d.bos_yer, d.rezervasyon_son, (NOW() >= d.rezervasyo
+uygulama-1  | GET /api/menuler/hafta?yemekhane=1&baslangic=2026-11-19 -> 200 (3 ms)
+uygulama-1  | [sql:yazma/kaynak] CALL sp_rezervasyon_yap(?, ?)
+uygulama-1  | POST /api/rezervasyonlar -> 201 (7 ms)
+uygulama-1  | [sql:okuma/kaynak] SELECT bakiye FROM kullanicilar WHERE id = ?
+uygulama-1  | GET /api/ben -> 200 (2 ms)
+uygulama-1  | [sql:okuma/replika] SELECT r.id, r.menu_id, r.durum, r.ucret, r.olusturma, r.kullanma_zamani, r.iptal_zamani, m.tarih, m.yemekhane
+uygulama-1  | GET /api/rezervasyonlar -> 200 (3 ms)
+uygulama-1  | [sql:yazma/kaynak] CALL sp_rezervasyon_iptal(?, ?)
+uygulama-1  | DELETE /api/rezervasyonlar/299 -> 200 (7 ms)
+uygulama-1  | [sql:okuma/kaynak] SELECT bakiye FROM kullanicilar WHERE id = ?
+uygulama-1  | GET /api/ben -> 200 (2 ms)
+uygulama-1  | [sql:okuma/kaynak] SELECT bakiye FROM kullanicilar WHERE id = ?
+uygulama-1  | [sql:okuma/replika] SELECT h.id, h.tur, h.tutar, h.aciklama, h.olusturma, m.tarih AS menu_tarihi, o.ad AS ogun FROM bakiye_hareket
+uygulama-1  | GET /api/bakiye -> 200 (3 ms)
+uygulama-1  | [sql:yazma/kaynak] CALL sp_bakiye_yukle(?, ?)
+uygulama-1  | [sql:okuma/kaynak] SELECT h.id, h.tur, h.tutar, h.aciklama, h.olusturma, m.tarih AS menu_tarihi, o.ad AS ogun FROM bakiye_hareket
+uygulama-1  | POST /api/bakiye -> 201 (8 ms)
