@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Günün Menüsü · Yemekhane</title>
+  <link rel="stylesheet" href="/css/temel.css">
+  <link rel="stylesheet" href="/css/uygulama.css">
+</head>
+<body data-sayfa="menu">
+  <header id="ust"></header>
+
+  <main class="kapsayici">
+    <div class="sayfa-baslik">
+      <h1>Günün Menüsü</h1>
+      <p>Yemekhane, tarih ve öğün seçin.</p>
+    </div>
+
+    <form id="secim" class="secim-satiri" onsubmit="return false">
+      <div class="alan">
+        <label for="yemekhane">Yemekhane</label>
+        <select id="yemekhane" name="yemekhane"></select>
+      </div>
+      <div class="alan">
+        <label for="tarih">Tarih</label>
+        <input id="tarih" name="tarih" type="date">
+      </div>
+      <fieldset class="alan" style="border:0;padding:0;margin-inline:0">
+        <legend style="font-weight:600;margin-bottom:.25rem;padding:0">Öğün</legend>
+        <div class="bolumlu" id="ogunler"></div>
+      </fieldset>
+    </form>
+
+    <p id="bildirim" class="bildirim" hidden></p>
+    <div id="menu" aria-live="polite"></div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/ortak.js"></script>
+  <script src="/js/menu.js"></script>
+</body>
+</html>
