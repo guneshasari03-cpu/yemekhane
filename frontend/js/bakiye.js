@@ -58,7 +58,7 @@
     return `
       <li class="hareket${yeni ? ' yeni' : ''}">
         <div>
-          <span class="hareket-ad">${esc(TUR_ADI[h.tur] || h.tur)}${menu}</span>
+          <span class="hareket-ad">${esc(h.aciklama || TUR_ADI[h.tur] || h.tur)}${menu}</span>
           <span class="hareket-zaman">${esc(zamanYaz(h.olusturma))}</span>
         </div>
         <span class="hareket-tutar ${h.tutar > 0 ? 'arti' : 'eksi'}">${isaret}${para(Math.abs(h.tutar))}</span>

@@ -9,6 +9,7 @@ const SAYFALAR = [
   { anahtar: 'rezervasyonlar', adres: '/rezervasyonlarim.html', ad: 'Rezervasyonlarım' },
   { anahtar: 'bakiye',         adres: '/bakiye.html',           ad: 'Bakiye' },
   { anahtar: 'degerlendirme',  adres: '/degerlendirme.html',    ad: 'Değerlendirme' },
+  { anahtar: 'profil',         adres: '/profil.html',           ad: 'Profil' },
   { anahtar: 'yonetim',        adres: '/yonetim.html',          ad: 'Yönetim', yonetici: true },
 ];
 
@@ -96,7 +97,7 @@ async function sayfaBaslat({ aktif, yoneticiGerekli = false } = {}) {
       <a class="marka" href="/menu.html">Yemek<span>hane</span></a>
       <div class="kullanici-kutu">
         <div>
-          <span>${esc(kullanici.ad)} ${esc(kullanici.soyad)}</span>
+          <a class="kullanici-ad" href="/profil.html">${esc(kullanici.ad)} ${esc(kullanici.soyad)}</a>
           <span class="bakiye-rozet" id="ust-bakiye">${para(kullanici.bakiye)}</span>
         </div>
         <button type="button" class="cikis-dugme" id="cikis">Çıkış</button>

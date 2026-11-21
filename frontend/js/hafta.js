@@ -77,8 +77,9 @@
       <article class="ogun-kart${m.suresi_doldu ? ' gecmis' : ''}" id="menu-${m.menu_id}">
         <div class="ogun-kart-ust">
           <h3>${esc(m.ogun)}</h3>
-          <span class="fiyat">${para(m.fiyat)}</span>
+          <span class="fiyat">${para(m.fiyat)}${m.yarim_fiyat !== null ? `<small>yarım ${para(m.yarim_fiyat)}</small>` : ''}</span>
         </div>
+        ${m.alerjen_uyarisi ? '<span class="etiket etiket-uyari">⚠ Alerjenlerinizi içeren yemek var</span>' : ''}
         <p class="ogun-yemekler">${esc(m.yemekler)}</p>
         <dl class="ogun-bilgi">
           <div><dt>Boş yer</dt><dd>${sayiYaz(m.bos_yer)} / ${sayiYaz(m.kapasite)}</dd></div>
@@ -91,7 +92,8 @@
 
   function eylemCiz(m) {
     if (m.rezervasyon_durum === 'aktif') {
-      return '<span class="durum durum-aktif">✓ Rezervasyonunuz var</span>';
+      const yarim = m.rezervasyon_porsiyon === 'yarim' ? ' (yarım porsiyon)' : '';
+      return `<span class="durum durum-aktif">✓ Rezervasyonunuz var${yarim}</span>`;
     }
     if (m.rezervasyon_durum === 'kullanildi') {
       return '<span class="durum durum-kullanildi">Kullanıldı</span>';
@@ -102,7 +104,15 @@
     if (m.bos_yer <= 0) {
       return '<button type="button" class="dugme" disabled>Kapasite dolu</button>';
     }
-    return `<button type="button" class="dugme" data-rezerve="${m.menu_id}">Rezerve et</button>`;
+    // Yarım porsiyon olan öğünlerde iki seçenek, kahvaltıda tek düğme
+    if (m.yarim_fiyat !== null) {
+      return `
+        <div class="porsiyon-dugmeler" role="group" aria-label="Porsiyon seçin">
+          <button type="button" class="dugme" data-rezerve="${m.menu_id}" data-porsiyon="tam">Tam · ${para(m.fiyat)}</button>
+          <button type="button" class="dugme dugme-ikincil" data-rezerve="${m.menu_id}" data-porsiyon="yarim">Yarım · ${para(m.yarim_fiyat)}</button>
+        </div>`;
+    }
+    return `<button type="button" class="dugme" data-rezerve="${m.menu_id}" data-porsiyon="tam">Rezerve et</button>`;
   }
 
   async function rezerveTiklandi(olay) {
@@ -110,28 +120,31 @@
     if (!dugme) return;
 
     const menuId = Number(dugme.dataset.rezerve);
+    const porsiyon = dugme.dataset.porsiyon;
     const kart = document.getElementById('menu-' + menuId);
     kart.querySelector('.satir-mesaj')?.remove();
-    dugme.disabled = true;
+    const eskiYazi = dugme.textContent;
+    kart.querySelectorAll('[data-rezerve]').forEach((d) => { d.disabled = true; });
     dugme.textContent = 'İşleniyor…';
 
     try {
       // Yanıttaki bakiye yordamın KAYNAKTA hesapladığı değerdir
-      const sonuc = await api('/rezervasyonlar', { yontem: 'POST', govde: { menu_id: menuId } });
+      const sonuc = await api('/rezervasyonlar', { yontem: 'POST', govde: { menu_id: menuId, porsiyon } });
       bakiyeGoster(sonuc.bakiye);
 
       // Liste replikadan yeniden çekilmez (gecikme olabilir); kart yerinde güncellenir
       const m = menuler.find((x) => x.menu_id === menuId);
       m.rezervasyon_durum = 'aktif';
+      m.rezervasyon_porsiyon = sonuc.porsiyon;
       m.bos_yer -= 1;
       kart.outerHTML = kartCiz(m);
       document.getElementById('menu-' + menuId).querySelector('.ogun-eylem').insertAdjacentHTML('beforeend',
         `<p class="satir-mesaj basari">${para(sonuc.ucret)} düşüldü. Kalan bakiye: ${para(sonuc.bakiye)}</p>`);
     } catch (hata) {
       // Yordamın mesajı ("Bakiye yetersiz." vb.) olduğu gibi gösterilir
-      dugme.disabled = false;
-      dugme.textContent = 'Rezerve et';
-      dugme.insertAdjacentHTML('afterend', `<p class="satir-mesaj hata" role="alert">${esc(hata.message)}</p>`);
+      kart.querySelectorAll('[data-rezerve]').forEach((d) => { d.disabled = false; });
+      dugme.textContent = eskiYazi;
+      kart.querySelector('.ogun-eylem').insertAdjacentHTML('beforeend', `<p class="satir-mesaj hata" role="alert">${esc(hata.message)}</p>`);
     }
   }
 })();

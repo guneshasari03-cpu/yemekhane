@@ -675,3 +675,310 @@ $ curl -s -w ' HTTP %{http_code}\n' -b /tmp/yemekhane-ogrenci.jar http://localho
 ```
 
 ## Aşama 4 · Değişiklik talebi
+
+İstenen iki özellik: **yarım porsiyon** (öğle ve akşamda, tam fiyatın %60'ı; kahvaltıda yok;
+geçmiş rezervasyonlar tam sayılır) ve **alerjen uyarısı** (kullanıcı profilinde alerjenlerini seçer,
+menüde bu alerjenleri içeren yemekler uyarıyla gösterilir). Değişiklik çalışan sisteme
+`rapor/asama4-dogrulama.sh` ile uygulandı; ham çıktı `rapor/asama4-cikti.txt` dosyasındadır.
+
+### 4.1 Veri modeli kararları
+
+| Değişiklik | Neden |
+|---|---|
+| `ogunler.yarim_oran DECIMAL(3,2) NULL` (öğle/akşam `0.60`, kahvaltı `NULL`) + `CHECK (0 < oran < 1)` | "Hangi öğünde yarım porsiyon var, oranı ne" kuralı **tek yerde** durur. Yordam ücreti, uygulama gösterilen fiyatı aynı sütundan hesaplar; kural değişirse kod değil veri değişir. |
+| `rezervasyonlar.porsiyon ENUM('tam','yarim') NOT NULL DEFAULT 'tam'` | Varsayılan `'tam'` olduğu için mevcut (geçmiş) rezervasyonların hepsi kendiliğinden tam porsiyon sayılır; hiçbir satır güncellenmez. |
+| Yeni tablo `kullanici_alerjenleri (kullanici_id, alerjen_id)` | Kullanıcı–alerjen çoktan çoğa ilişkisi. Kullanıcı silinirse satırları da silinir (`ON DELETE CASCADE`). |
+| `sp_rezervasyon_yap(p_kullanici_id, p_menu_id, p_porsiyon)` | Yarım porsiyon ücreti ve "kahvaltıda yok" kuralı rezervasyonla aynı transaction'da, yordamda denetlenir. |
+
+Ücret rezervasyonda saklandığı için `sp_rezervasyon_iptal` değişmedi: yarım porsiyon iptal
+edildiğinde iade, kesilen yarım ücret kadardır. Yarım porsiyon da bir kişilik yer kaplar
+(kapasite kuralı aynı).
+
+### 4.2 Migration: `db/init/04_degisiklik.sql`
+
+Dosya `db/init/` altında olduğu için depoyu sıfırdan kuran biri (`docker compose up -d`)
+değişikliği otomatik alır. Çalışan sistemde **yalnızca kaynakta** çalıştırılır:
+
+```sql
+-- Yardımcı: sütun yoksa ekler (MySQL 8.4'te ADD COLUMN IF NOT EXISTS yok)
+CALL _sutun_ekle('ogunler', 'yarim_oran',
+    'DECIMAL(3,2) NULL DEFAULT NULL COMMENT ''…'' CONSTRAINT ck_ogun_yarim_oran CHECK (yarim_oran > 0 AND yarim_oran < 1)');
+UPDATE ogunler SET yarim_oran = 0.60 WHERE ad IN ('Öğle', 'Akşam') AND yarim_oran IS NULL;
+
+CALL _sutun_ekle('rezervasyonlar', 'porsiyon', 'ENUM(''tam'',''yarim'') NOT NULL DEFAULT ''tam'' AFTER menu_id');
+
+CREATE TABLE IF NOT EXISTS kullanici_alerjenleri ( … );
+
+DROP PROCEDURE IF EXISTS sp_rezervasyon_yap;
+CREATE PROCEDURE sp_rezervasyon_yap(IN p_kullanici_id INT UNSIGNED, IN p_menu_id INT UNSIGNED, IN p_porsiyon VARCHAR(20)) …
+```
+
+* **Mevcut veriyi bozmaz:** yalnızca yeni tablo ve varsayılan değerli yeni sütunlar eklenir, hiçbir
+  satır silinmez. MySQL 8.4'te varsayılan değerli sütun eklemek `INSTANT` algoritmasıyla yapılır;
+  369 satırlık `rezervasyonlar` tablosu yeniden yazılmaz ve kilitlenmez.
+* **Tekrar çalıştırılabilir:** sütunlar `information_schema` kontrol edilerek eklenir, tablo
+  `IF NOT EXISTS` ile oluşturulur, `UPDATE` yalnızca `NULL` olanları değiştirir, yordam
+  `DROP … IF EXISTS` ile yeniden oluşturulur. Yanlışlıkla iki kez çalıştırılırsa hata vermez.
+
+```
+$ docker compose exec -T mysql-primary mysql --default-character-set=utf8mb4 -uroot -pyemekhane_kok yemekhane < db/init/04_degisiklik.sql && echo 'Migration tamam'
+Migration tamam
+
+$ docker compose exec -T mysql-primary mysql --default-character-set=utf8mb4 -uroot -pyemekhane_kok yemekhane < db/init/04_degisiklik.sql && echo 'İkinci çalıştırma tamam'
+İkinci çalıştırma tamam
+```
+
+**Güncellenmiş yordamdaki değişiklikler** (geri kalanı Aşama 1'deki yordamla aynı):
+
+```sql
+SET v_porsiyon = COALESCE(p_porsiyon, 'tam');
+IF v_porsiyon NOT IN ('tam', 'yarim') THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Porsiyon tam ya da yarım olmalıdır.';
+END IF;
+…
+SELECT …, o.ad, o.yarim_oran INTO …, v_ogun, v_yarim_oran FROM menuler m JOIN ogunler o … FOR UPDATE;
+…
+IF v_porsiyon = 'yarim' AND v_yarim_oran IS NULL THEN
+    SET v_mesaj = CONCAT(v_ogun, ' menüsünde yarım porsiyon yoktur.');
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_mesaj;
+END IF;
+…
+SET v_ucret = IF(v_rol = 'ogrenci', v_ogr_fiyat, v_per_fiyat);
+IF v_porsiyon = 'yarim' THEN
+    SET v_ucret = ROUND(v_ucret * v_yarim_oran, 2);
+END IF;
+…
+INSERT INTO rezervasyonlar (kullanici_id, menu_id, porsiyon, durum, ucret) VALUES (…, v_porsiyon, 'aktif', v_ucret);
+INSERT INTO bakiye_hareketleri (…, aciklama)
+VALUES (…, IF(v_porsiyon = 'yarim', 'Rezervasyon (yarım porsiyon)', 'Rezervasyon'));
+…
+SELECT v_rez_id AS rezervasyon_id, v_porsiyon AS porsiyon, v_ucret AS ucret, v_bakiye - v_ucret AS bakiye;
+```
+
+### 4.3 Değişikliğin replikaya geçtiğinin kanıtı
+
+Migration replikaya **ayrıca uygulanmadı**; DDL ve yordam binlog üzerinden geçti. Aşağıdaki
+çıktıların hepsi **replikadan** alınmıştır:
+
+```
+$ docker compose exec -T mysql-replica mysql … -e "SHOW REPLICA STATUS\G" | grep -E '…'
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+        Seconds_Behind_Source: 0
+               Last_SQL_Error:
+
+$ docker compose exec -T mysql-replica mysql --default-character-set=utf8mb4 -uroot -pyemekhane_kok yemekhane -e "SHOW CREATE TABLE rezervasyonlar\G"
+       Table: rezervasyonlar
+Create Table: CREATE TABLE `rezervasyonlar` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `kullanici_id` int unsigned NOT NULL,
+  `menu_id` int unsigned NOT NULL,
+  `porsiyon` enum('tam','yarim') COLLATE utf8mb4_tr_0900_ai_ci NOT NULL DEFAULT 'tam',
+  `durum` enum('aktif','kullanildi','iptal') CHARACTER SET utf8mb4 COLLATE utf8mb4_tr_0900_ai_ci NOT NULL DEFAULT 'aktif',
+  `ucret` decimal(8,2) NOT NULL,
+  `olusturma` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `kullanma_zamani` datetime DEFAULT NULL,
+  `iptal_zamani` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_rezervasyon` (`kullanici_id`,`menu_id`),
+  KEY `ix_rezervasyon_menu_durum` (`menu_id`,`durum`),
+  CONSTRAINT `fk_rez_kullanici` FOREIGN KEY (`kullanici_id`) REFERENCES `kullanicilar` (`id`),
+  CONSTRAINT `fk_rez_menu` FOREIGN KEY (`menu_id`) REFERENCES `menuler` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=370 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_tr_0900_ai_ci
+
+$ docker compose exec -T mysql-replica mysql … yemekhane -e "SHOW CREATE TABLE ogunler\G"
+Create Table: CREATE TABLE `ogunler` (
+  `id` tinyint unsigned NOT NULL,
+  `ad` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_tr_0900_ai_ci NOT NULL,
+  `sira` tinyint unsigned NOT NULL,
+  `son_saat` time NOT NULL,
+  `servis_baslangic` time NOT NULL,
+  `servis_bitis` time NOT NULL,
+  `yarim_oran` decimal(3,2) DEFAULT NULL COMMENT 'Yarım porsiyon fiyat oranı; NULL ise bu öğünde yarım porsiyon yok',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_ogun_ad` (`ad`),
+  CONSTRAINT `ck_ogun_yarim_oran` CHECK (((`yarim_oran` > 0) and (`yarim_oran` < 1)))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_tr_0900_ai_ci
+
+$ docker compose exec -T mysql-replica mysql … yemekhane -e "SHOW CREATE TABLE kullanici_alerjenleri\G"
+Create Table: CREATE TABLE `kullanici_alerjenleri` (
+  `kullanici_id` int unsigned NOT NULL,
+  `alerjen_id` tinyint unsigned NOT NULL,
+  PRIMARY KEY (`kullanici_id`,`alerjen_id`),
+  KEY `ix_ka_alerjen` (`alerjen_id`),
+  CONSTRAINT `fk_ka_alerjen` FOREIGN KEY (`alerjen_id`) REFERENCES `alerjenler` (`id`),
+  CONSTRAINT `fk_ka_kullanici` FOREIGN KEY (`kullanici_id`) REFERENCES `kullanicilar` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_tr_0900_ai_ci
+```
+
+Güncellenmiş yordam da replikada (3 parametre) ve mevcut veri bozulmamış: migration öncesinde
+de sonrasında da 369 rezervasyon var, hepsi `tam`, bakiye toplamı hareket toplamına eşit
+(önce ve sonra 10 387,50 TL):
+
+```
+$ docker compose exec -T mysql-replica mysql … -e "SELECT ORDINAL_POSITION AS sira, PARAMETER_NAME AS parametre, DTD_IDENTIFIER AS tur FROM information_schema.PARAMETERS WHERE SPECIFIC_SCHEMA = 'yemekhane' AND SPECIFIC_NAME = 'sp_rezervasyon_yap' ORDER BY ORDINAL_POSITION"
++------+----------------+--------------+
+| sira | parametre      | tur          |
++------+----------------+--------------+
+|    1 | p_kullanici_id | int unsigned |
+|    2 | p_menu_id      | int unsigned |
+|    3 | p_porsiyon     | varchar(20)  |
++------+----------------+--------------+
+
+$ docker compose exec -T mysql-replica mysql … -e "SELECT porsiyon, COUNT(*) AS adet FROM rezervasyonlar GROUP BY porsiyon"
++----------+------+
+| porsiyon | adet |
++----------+------+
+| tam      |  369 |
++----------+------+
+
+$ docker compose exec -T mysql-replica mysql … -e "SELECT ad, yarim_oran FROM ogunler ORDER BY sira"
++-----------+------------+
+| ad        | yarim_oran |
++-----------+------------+
+| Kahvaltı  |       NULL |
+| Öğle      |       0.60 |
+| Akşam     |       0.60 |
++-----------+------------+
+
+$ docker compose exec -T mysql-replica mysql … -e "SELECT COUNT(*) AS rezervasyon, (SELECT SUM(bakiye) FROM kullanicilar) AS toplam_bakiye, (SELECT SUM(tutar) FROM bakiye_hareketleri) AS hareket_toplami FROM rezervasyonlar"
++-------------+---------------+-----------------+
+| rezervasyon | toplam_bakiye | hareket_toplami |
++-------------+---------------+-----------------+
+|         369 |      10387.50 |        10387.50 |
++-------------+---------------+-----------------+
+```
+
+### 4.4 Geçiş sırası
+
+1. Migration kaynakta çalıştırılır (replikaya kendiliğinden geçer).
+2. Yeni uygulama derlenip başlatılır: `docker compose up -d --build uygulama`.
+3. Redis'teki eski yapıdaki menü kayıtları silinir (4.6).
+
+`sp_rezervasyon_yap`'ın parametre sayısı değiştiği için 1. ve 2. adım arasındaki birkaç saniyede
+eski uygulamanın rezervasyon isteği "parametre sayısı yanlış" hatası alır (MySQL yordam
+aşırı yüklemeyi ve varsayılan parametreyi desteklemez). Bu yüzden iki adım betikte arka arkaya
+çalıştırılmıştır; menü, liste ve bakiye ekranları bu sürede etkilenmez. Uygulama `porsiyon`
+gönderilmezse `'tam'` kabul eder; bu yüzden eski arayüz sayfaları da yeni API ile çalışmaya
+devam eder.
+
+### 4.5 Uygulama ve arayüz
+
+**Yarım porsiyon.** Menü sorguları `ogunler.yarim_oran`'ı birleştirip yarım fiyatı SQL'de
+hesaplar (`ROUND(m.ogrenci_fiyati * o.yarim_oran, 2) AS ogrenci_yarim_fiyati`); kahvaltıda oran
+`NULL` olduğu için fiyat da `NULL` gelir. Servis katmanı role göre `fiyat` ve `yarim_fiyat` seçer.
+Arayüz kural bilmez: `yarim_fiyat` doluysa haftalık menüde "Tam · 40,00 TL" ve "Yarım · 24,00 TL"
+iki düğmesini, boşsa tek "Rezerve et" düğmesini gösterir. İstek
+`POST /api/rezervasyonlar {"menu_id":68,"porsiyon":"yarim"}`; geçerlilik ve ücret yordamdadır.
+Rezervasyonlarım ekranı porsiyonu, Bakiye ekranı yordamın yazdığı "Rezervasyon (yarım porsiyon)"
+açıklamasını gösterir.
+
+**Alerjen uyarısı.** Yeni **Profil** ekranı (`profil.html`, `GET /api/profil`,
+`PUT /api/profil/alerjenler`) kullanıcının alerjenlerini tek transaction'da kaydeder. Günün menüsü
+önbellekten (herkes için aynı) gelir; kullanıcının alerjenleri ise **önbellekten sonra**, her
+istekte eklenir. Böylece önbellek kişiye özel olmaz:
+
+```js
+// src/servisler/menuServisi.js
+function alerjenUyarisiEkle(menu, kullaniciAlerjenleri) {
+  const yemekler = menu.yemekler.map((y) => {
+    const uyarilar = kullaniciAlerjenleri.filter((a) => y.alerjen_idler.includes(a.id)).map((a) => a.ad);
+    return { ...y, uyari_alerjenler: uyarilar };
+  });
+  return { ...menu, yemekler,
+           uyarili_yemek_sayisi: yemekler.filter((y) => y.uyari_alerjenler.length > 0).length };
+}
+```
+
+Arayüz uyarılı yemeği kırmızı zeminle ve "⚠ Alerjeniniz: Gluten, Süt" satırıyla gösterir; menünün
+üstünde "Bu menüde alerjenlerinizi içeren N yemek var" uyarısı çıkar. Haftalık menüde kullanıcının
+alerjenini içeren yemeği olan öğünler "⚠ Alerjenlerinizi içeren yemek var" rozetiyle işaretlenir
+(SQL'de `EXISTS` ile).
+
+**Deneme sonuçları** (yarının öğle menüsü, öğrenci):
+
+```
+$ curl … '/api/menu?yemekhane=1&tarih=2026-11-22&ogun=2' | grep -o '"fiyat":…\|"yarim_fiyat":…'
+"fiyat":40
+"yarim_fiyat":24
+"fiyat_turu":"ogrenci"
+
+$ curl … -X POST -H 'Content-Type: application/json' -d '{"menu_id":68,"porsiyon":"yarim"}' http://localhost:8080/api/rezervasyonlar
+{"rezervasyon_id":370,"porsiyon":"yarim","ucret":24,"bakiye":981} HTTP 201
+
+(replika)
++-----+---------+----------+-------+-------+--------+-------------------------------+
+| id  | menu_id | porsiyon | ucret | durum | tutar  | aciklama                      |
++-----+---------+----------+-------+-------+--------+-------------------------------+
+| 370 |      68 | yarim    | 24.00 | aktif | -24.00 | Rezervasyon (yarım porsiyon)  |
++-----+---------+----------+-------+-------+--------+-------------------------------+
+
+$ curl … -d '{"menu_id":67,"porsiyon":"yarim"}' http://localhost:8080/api/rezervasyonlar      (kahvaltı)
+{"hata":"Kahvaltı menüsünde yarım porsiyon yoktur."} HTTP 400
+
+$ curl … -d '{"menu_id":68,"porsiyon":"ceyrek"}' http://localhost:8080/api/rezervasyonlar
+{"hata":"Porsiyon tam ya da yarım olmalıdır."} HTTP 400
+
+$ curl … -X PUT -d '{"alerjen_idler":[1,7]}' http://localhost:8080/api/profil/alerjenler
+{"alerjenler":[{"id":1,"ad":"Gluten"},{"id":7,"ad":"Süt"}]} HTTP 200
+
+$ curl … '/api/menu?yemekhane=1&tarih=2026-11-22&ogun=2' | grep -o '…'
+"ad":"Şehriyeli Tavuk Çorbası"   "uyari_alerjenler":["Gluten"]
+"ad":"Tavuk Şiş"                 "uyari_alerjenler":[]
+"ad":"Su Böreği"                 "uyari_alerjenler":["Gluten","Süt"]
+"ad":"Kemalpaşa Tatlısı"         "uyari_alerjenler":["Gluten","Süt"]
+"uyarili_yemek_sayisi":3
+```
+
+40 TL'lik öğle menüsünde yarım porsiyon ücreti 24,00 TL'dir (%60).
+
+**Günün menüsünde alerjen uyarısı ve yarım porsiyon fiyatı**
+
+![Alerjen uyarısı](ekran/asama4-menu.png)
+
+**Haftalık menüde porsiyon seçimi**
+
+![Porsiyon seçimi](ekran/asama4-hafta.png)
+
+**Profilde alerjen seçimi**
+
+![Profil](ekran/asama4-profil.png)
+
+### 4.6 Redis'te eski yapıdaki menü kayıtlarının temizlenmesi
+
+Aşama 3'te önbelleğe yazılan menü nesnelerinde yarım porsiyon alanları yoktur; yeni uygulama bu
+kayıtları kullanırsa yarım porsiyon fiyatını gösteremez. İki önlem alındı:
+
+1. **Geçişte toplu silme:** yeni uygulama başladıktan sonra tüm `menu:*` anahtarları silindi.
+2. **Yapı sürümü:** yeni uygulama önbelleğe yazdığı nesneye `"surum":2` ekler; okurken sürümü
+   tutmayan kayıt görürse kullanmaz, siler ve menüyü veritabanından okur
+   (`[onbellek] eski yapıda kayıt silindi: …`). Böylece silme adımı atlansa bile eski kayıt
+   kullanılmaz.
+
+```
+$ docker compose exec -T redis redis-cli --scan --pattern 'menu:*'
+menu:1:2026-11-21:1
+menu:1:2026-11-21:3
+menu:1:2026-11-22:2
+
+$ docker compose exec -T redis redis-cli GET menu:1:2026-11-22:2 | grep -o '"surum":[0-9]*\|"yarim_oran":[0-9.]*' || echo '(surum ve yarim_oran alanı yok: eski yapı)'
+(surum ve yarim_oran alanı yok: eski yapı)
+
+$ docker compose exec -T redis sh -c "redis-cli --scan --pattern 'menu:*' | xargs -r redis-cli DEL"
+3
+
+$ docker compose exec -T redis redis-cli --scan --pattern 'menu:*' | wc -l
+0
+
+# Yeni uygulama menüyü yeni yapıda önbelleğe alır
+$ curl -s -o /dev/null -w 'HTTP %{http_code}\n' -b /tmp/yemekhane-ogrenci.jar 'http://localhost:8080/api/menu?yemekhane=1&tarih=2026-11-22&ogun=2'
+HTTP 200
+
+$ docker compose exec -T redis redis-cli GET menu:1:2026-11-22:2 | grep -o '"surum":[0-9]*\|"yarim_oran":[0-9.]*\|"ogrenci_yarim_fiyati":[0-9.]*'
+"yarim_oran":0.6
+"ogrenci_yarim_fiyati":24
+"surum":2
+```
+
+`KEYS menu:*` yerine `--scan` kullanıldı: `KEYS` tüm anahtar uzayını tek seferde tarayıp Redis'i
+kilitler, `SCAN` ise parça parça ilerler ve canlı sistemde güvenlidir.

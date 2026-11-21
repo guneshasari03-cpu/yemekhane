@@ -12,16 +12,22 @@ async function ogunler() {
   );
 }
 
-// Bir menünün yemek satırları (v_menu_detay: her yemek bir satır)
+// Bir menünün yemek satırları (v_menu_detay: her yemek bir satır).
+// Aşama 4: yarım porsiyon oranı ve fiyatları ogunler.yarim_oran'dan hesaplanır
+// (oran NULL ise o öğünde yarım porsiyon yoktur, fiyatlar da NULL gelir).
 async function menuDetaySatirlari(yemekhaneId, tarih, ogunId) {
   return db.oku(
-    `SELECT menu_id, tarih, yemekhane_id, yemekhane, ogun_id, ogun,
-            rezervasyon_son, ogrenci_fiyati, personel_fiyati,
-            yemek_id, yemek, kategori, kategori_sira, kalori, vejetaryen,
-            alerjenler, alerjen_idler
-       FROM v_menu_detay
-      WHERE yemekhane_id = ? AND tarih = ? AND ogun_id = ?
-      ORDER BY kategori_sira, yemek`,
+    `SELECT v.menu_id, v.tarih, v.yemekhane_id, v.yemekhane, v.ogun_id, v.ogun,
+            v.rezervasyon_son, v.ogrenci_fiyati, v.personel_fiyati,
+            o.yarim_oran,
+            ROUND(v.ogrenci_fiyati * o.yarim_oran, 2)  AS ogrenci_yarim_fiyati,
+            ROUND(v.personel_fiyati * o.yarim_oran, 2) AS personel_yarim_fiyati,
+            v.yemek_id, v.yemek, v.kategori, v.kategori_sira, v.kalori, v.vejetaryen,
+            v.alerjenler, v.alerjen_idler
+       FROM v_menu_detay v
+       JOIN ogunler o ON o.id = v.ogun_id
+      WHERE v.yemekhane_id = ? AND v.tarih = ? AND v.ogun_id = ?
+      ORDER BY v.kategori_sira, v.yemek`,
     [yemekhaneId, tarih, ogunId]
   );
 }
@@ -35,13 +41,22 @@ async function haftalik(yemekhaneId, kullaniciId, baslangic) {
             d.rezervasyon_son,
             (NOW() >= d.rezervasyon_son)          AS suresi_doldu,
             m.ogrenci_fiyati, m.personel_fiyati,
+            o.yarim_oran,
+            ROUND(m.ogrenci_fiyati * o.yarim_oran, 2)  AS ogrenci_yarim_fiyati,
+            ROUND(m.personel_fiyati * o.yarim_oran, 2) AS personel_yarim_fiyati,
+            EXISTS (SELECT 1
+                      FROM menu_yemekleri my2
+                      JOIN yemek_alerjenleri ya     ON ya.yemek_id = my2.yemek_id
+                      JOIN kullanici_alerjenleri ka ON ka.alerjen_id = ya.alerjen_id
+                     WHERE my2.menu_id = d.menu_id AND ka.kullanici_id = ?) AS alerjen_uyarisi,
             (SELECT GROUP_CONCAT(y.ad ORDER BY k.sira, y.ad SEPARATOR ', ')
                FROM menu_yemekleri my
                JOIN yemekler y           ON y.id = my.yemek_id
                JOIN yemek_kategorileri k ON k.id = y.kategori_id
               WHERE my.menu_id = d.menu_id)       AS yemekler,
-            r.id    AS rezervasyon_id,
-            r.durum AS rezervasyon_durum
+            r.id       AS rezervasyon_id,
+            r.durum    AS rezervasyon_durum,
+            r.porsiyon AS rezervasyon_porsiyon
        FROM v_menu_doluluk d
        JOIN menuler m ON m.id = d.menu_id
        JOIN ogunler o ON o.id = d.ogun_id
@@ -51,7 +66,7 @@ async function haftalik(yemekhaneId, kullaniciId, baslangic) {
         AND d.tarih BETWEEN COALESCE(?, CURDATE())
                         AND COALESCE(?, CURDATE()) + INTERVAL 6 DAY
       ORDER BY d.tarih, o.sira`,
-    [kullaniciId, yemekhaneId, baslangic, baslangic]
+    [kullaniciId, kullaniciId, yemekhaneId, baslangic, baslangic]
   );
 }
 

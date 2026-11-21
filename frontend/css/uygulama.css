@@ -259,7 +259,7 @@ main { flex: 1; padding-block: 1.25rem 3rem; }
 }
 .etiket-veg { background: var(--basari-zemin); color: var(--basari); }
 .etiket-alerjen { background: var(--uyari-zemin); color: var(--uyari); }
-.etiket-uyari { background: var(--hata-zemin); color: var(--hata); }
+.etiket-uyari { background: var(--hata); color: #fff; }
 
 .menu-ozet { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0.75rem 1rem 0; }
 .menu-alt-baglanti { margin-top: 1rem; }
@@ -571,4 +571,52 @@ main { flex: 1; padding-block: 1.25rem 3rem; }
   .filtre-izgara { grid-template-columns: 1.5fr 1fr 1fr; }
   .filtre-izgara .tam { grid-column: auto; }
   .form-izgara { grid-template-columns: repeat(3, 1fr) ; }
+}
+
+/* =====================================================================
+   Aşama 4: yarım porsiyon, alerjen uyarısı, profil
+   ===================================================================== */
+.gizli { position: absolute; left: -9999px; }
+
+.kullanici-ad { color: #fff; text-decoration: none; }
+.kullanici-ad:hover { color: #fff; text-decoration: underline; }
+
+/* Alerjen uyarısı */
+.uyari-bant { margin-bottom: 1rem; }
+.uyari-bant a { color: inherit; font-weight: 700; }
+.yemek.uyarili {
+  background: var(--hata-zemin);
+  margin-inline: -1rem;
+  padding-inline: 1rem;
+  border-bottom-color: #fff;
+  box-shadow: inset 4px 0 0 var(--hata);
+}
+.yemek-uyari {
+  grid-column: 1 / -1;
+  margin: 0.3rem 0 0;
+  color: var(--hata);
+  font-weight: 700;
+  font-size: var(--boyut-kucuk);
+}
+.ogun-kart > .etiket-uyari { align-self: flex-start; }
+
+/* Yarım porsiyon */
+.fis-fiyat small + small { margin-top: 0.15rem; }
+.ogun-kart-ust .fiyat { text-align: right; }
+.ogun-kart-ust .fiyat small {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--metin-soluk);
+}
+.porsiyon-dugmeler { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; }
+.porsiyon-dugmeler .dugme { padding-inline: 0.4rem; font-size: var(--boyut-kucuk); white-space: nowrap; }
+
+/* Profil */
+.profil-bilgi { margin: 0; display: grid; gap: 0.6rem; }
+.profil-bilgi dt { font-size: 0.75rem; color: var(--metin-soluk); text-transform: uppercase; letter-spacing: .04em; }
+.profil-bilgi dd { margin: 0; font-weight: 600; word-break: break-word; }
+
+@media (min-width: 640px) {
+  .yemek.uyarili { margin-inline: -1.5rem; padding-inline: 1.5rem; }
 }

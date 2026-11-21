@@ -3,10 +3,12 @@
 const rezervasyonDeposu = require('../veri/rezervasyonDeposu');
 const dogrula = require('./dogrula');
 
-// POST /api/rezervasyonlar  { menu_id }
+// POST /api/rezervasyonlar  { menu_id, porsiyon: 'tam' | 'yarim' }
 async function olustur(req, res) {
   const menuId = dogrula.pozitifTamsayi(req.body?.menu_id, 'Menü');
-  const sonuc = await rezervasyonDeposu.rezervasyonYap(req.kullanici.id, menuId);
+  // Porsiyon verilmezse tam; geçersiz değeri ve kahvaltıda yarımı yordam reddeder
+  const porsiyon = String(req.body?.porsiyon ?? 'tam');
+  const sonuc = await rezervasyonDeposu.rezervasyonYap(req.kullanici.id, menuId, porsiyon);
   // sonuc.bakiye yordamın kaynakta hesapladığı güncel bakiyedir
   res.status(201).json(sonuc);
 }

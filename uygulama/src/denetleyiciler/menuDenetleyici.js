@@ -1,6 +1,7 @@
 // Menü ekranlarının uç noktaları. Burada SQL yoktur; veri servis/depo katmanından gelir.
 const menuDeposu = require('../veri/menuDeposu');
 const menuServisi = require('../servisler/menuServisi');
+const profilDeposu = require('../veri/profilDeposu');
 const dogrula = require('./dogrula');
 const { UygulamaHatasi } = require('../hatalar');
 
@@ -20,10 +21,14 @@ async function gunluk(req, res) {
   const tarih = dogrula.tarih(req.query.tarih);
   const ogunId = dogrula.pozitifTamsayi(req.query.ogun, 'Öğün');
 
-  const menu = await menuServisi.menuGetir(yemekhaneId, tarih, ogunId);
+  const [menu, alerjenler] = await Promise.all([
+    menuServisi.menuGetir(yemekhaneId, tarih, ogunId),
+    profilDeposu.kullaniciAlerjenleri(req.kullanici.id),
+  ]);
   if (!menu) throw new UygulamaHatasi(404, 'Bu yemekhane, tarih ve öğün için menü bulunamadı.');
 
-  res.json({ ...menu, ...menuServisi.fiyatSec(req.kullanici.rol, menu) });
+  const kisisel = menuServisi.alerjenUyarisiEkle(menu, alerjenler);
+  res.json({ ...kisisel, ...menuServisi.fiyatSec(req.kullanici.rol, menu), kullanici_alerjenleri: alerjenler });
 }
 
 // GET /api/menuler/hafta?yemekhane=1[&baslangic=2026-11-19]   (haftalık menü)
@@ -44,7 +49,14 @@ async function haftalik(req, res) {
     suresi_doldu: s.suresi_doldu === 1,
     rezervasyon_id: s.rezervasyon_id,
     rezervasyon_durum: s.rezervasyon_durum,   // null | aktif | kullanildi | iptal
-    ...menuServisi.fiyatSec(req.kullanici.rol, s),
+    rezervasyon_porsiyon: s.rezervasyon_porsiyon,
+    alerjen_uyarisi: s.alerjen_uyarisi === 1,
+    ...menuServisi.fiyatSec(req.kullanici.rol, {
+      ogrenci_fiyati: s.ogrenci_fiyati,
+      personel_fiyati: s.personel_fiyati,
+      ogrenci_yarim_fiyati: s.ogrenci_yarim_fiyati,
+      personel_yarim_fiyati: s.personel_yarim_fiyati,
+    }),
   }));
   res.json(menuler);
 }

@@ -1,9 +1,10 @@
 // Rezervasyon işlemleri. Yazmalar yordamlarla kaynakta, listeleme replikada.
 const db = require('./baglanti');
 
-// Dönen: { rezervasyon_id, ucret, bakiye }  (bakiye kaynaktaki güncel değerdir)
-async function rezervasyonYap(kullaniciId, menuId) {
-  return db.yordam('sp_rezervasyon_yap', [kullaniciId, menuId]);
+// Dönen: { rezervasyon_id, porsiyon, ucret, bakiye }  (bakiye kaynaktaki güncel değerdir)
+// Aşama 4: porsiyon 'tam' | 'yarim'. Geçerlilik ve yarım ücret yordamda hesaplanır.
+async function rezervasyonYap(kullaniciId, menuId, porsiyon) {
+  return db.yordam('sp_rezervasyon_yap', [kullaniciId, menuId, porsiyon]);
 }
 
 // Dönen: { rezervasyon_id, iade, bakiye }
@@ -15,7 +16,7 @@ async function iptalEt(kullaniciId, rezervasyonId) {
 // iptal_edilebilir ve degerlendirilebilir kararları veritabanında verilir.
 async function kullanicininRezervasyonlari(kullaniciId) {
   return db.oku(
-    `SELECT r.id, r.menu_id, r.durum, r.ucret, r.olusturma,
+    `SELECT r.id, r.menu_id, r.durum, r.porsiyon, r.ucret, r.olusturma,
             r.kullanma_zamani, r.iptal_zamani,
             m.tarih, m.yemekhane_id, yh.ad AS yemekhane,
             m.ogun_id, o.ad AS ogun,

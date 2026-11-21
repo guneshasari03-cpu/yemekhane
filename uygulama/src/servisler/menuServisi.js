@@ -34,6 +34,10 @@ function menuOlustur(satirlar) {
     rezervasyon_son: ilk.rezervasyon_son,
     ogrenci_fiyati: ilk.ogrenci_fiyati,
     personel_fiyati: ilk.personel_fiyati,
+    // Aşama 4: yarım porsiyon (oran NULL ise bu öğünde yok)
+    yarim_oran: ilk.yarim_oran,
+    ogrenci_yarim_fiyati: ilk.ogrenci_yarim_fiyati,
+    personel_yarim_fiyati: ilk.personel_yarim_fiyati,
     toplam_kalori: yemekler.reduce((toplam, y) => toplam + y.kalori, 0),
     tumu_vejetaryen: yemekler.every((y) => y.vejetaryen),
     yemekler,
@@ -59,10 +63,26 @@ async function menuGetir(yemekhaneId, tarih, ogunId) {
 
 // Öğrenci öğrenci fiyatını, personel ve yönetici personel fiyatını öder.
 // (sp_rezervasyon_yap da aynı kuralla ücret keser.)
+// yarim_fiyat null ise bu öğünde yarım porsiyon yoktur (kahvaltı).
 function fiyatSec(rol, menu) {
   return rol === 'ogrenci'
-    ? { fiyat: menu.ogrenci_fiyati, fiyat_turu: 'ogrenci' }
-    : { fiyat: menu.personel_fiyati, fiyat_turu: 'personel' };
+    ? { fiyat: menu.ogrenci_fiyati, yarim_fiyat: menu.ogrenci_yarim_fiyati, fiyat_turu: 'ogrenci' }
+    : { fiyat: menu.personel_fiyati, yarim_fiyat: menu.personel_yarim_fiyati, fiyat_turu: 'personel' };
 }
 
-module.exports = { menuGetir, fiyatSec };
+// Aşama 4: menüyü kullanıcının alerjenlerine göre işaretler.
+// Önbellekteki menü herkes için aynıdır; uyarı her istekte, önbellekten SONRA eklenir.
+// kullaniciAlerjenleri: [{ id, ad }]
+function alerjenUyarisiEkle(menu, kullaniciAlerjenleri) {
+  const yemekler = menu.yemekler.map((y) => {
+    const uyarilar = kullaniciAlerjenleri.filter((a) => y.alerjen_idler.includes(a.id)).map((a) => a.ad);
+    return { ...y, uyari_alerjenler: uyarilar };
+  });
+  return {
+    ...menu,
+    yemekler,
+    uyarili_yemek_sayisi: yemekler.filter((y) => y.uyari_alerjenler.length > 0).length,
+  };
+}
+
+module.exports = { menuGetir, fiyatSec, alerjenUyarisiEkle };

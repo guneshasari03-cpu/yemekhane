@@ -56,7 +56,7 @@
         <div class="rez-ust">
           <div>
             <strong>${esc(r.ogun)} · ${esc(tarihYaz(r.tarih, { day: 'numeric', month: 'long', weekday: 'long' }))}</strong>
-            <span class="soluk kucuk">${esc(r.yemekhane)} · ${para(r.ucret)}</span>
+            <span class="soluk kucuk">${esc(r.yemekhane)} · ${r.porsiyon === 'yarim' ? 'Yarım porsiyon' : 'Tam porsiyon'} · ${para(r.ucret)}</span>
           </div>
           <span class="durum durum-${r.durum}">${DURUM_ADI[r.durum]}</span>
         </div>

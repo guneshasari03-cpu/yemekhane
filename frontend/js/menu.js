@@ -49,16 +49,24 @@
 
   function menuCiz(m) {
     const yemekler = m.yemekler.map((y) => {
+      // Kullanıcının alerjenleri kırmızı, diğer alerjenler turuncu etiketle gösterilir
       const etiketler = [
         y.vejetaryen ? '<span class="etiket etiket-veg">Vejetaryen</span>' : '',
-        ...y.alerjenler.map((a) => `<span class="etiket etiket-alerjen">${esc(a)}</span>`),
+        ...y.alerjenler.map((a) => {
+          const sizin = y.uyari_alerjenler.includes(a);
+          return `<span class="etiket ${sizin ? 'etiket-uyari' : 'etiket-alerjen'}">${esc(a)}</span>`;
+        }),
       ].join('');
+      const uyari = y.uyari_alerjenler.length
+        ? `<p class="yemek-uyari" role="note">⚠ Alerjeniniz: ${esc(y.uyari_alerjenler.join(', '))}</p>`
+        : '';
       return `
-        <li class="yemek">
+        <li class="yemek${y.uyari_alerjenler.length ? ' uyarili' : ''}">
           <span class="yemek-kategori">${esc(y.kategori)}</span>
           <span class="yemek-ad">${esc(y.ad)}</span>
           <span class="yemek-kalori">${sayiYaz(y.kalori)} kcal</span>
           <div class="etiketler">${etiketler}</div>
+          ${uyari}
         </li>`;
     }).join('');
 
@@ -67,14 +75,30 @@
       ? '<div class="menu-ozet"><span class="etiket etiket-veg">Bu menü tamamen vejetaryen</span></div>'
       : '';
 
+    let alerjenBilgi;
+    if (m.uyarili_yemek_sayisi > 0) {
+      alerjenBilgi = `<p class="bildirim bildirim-hata uyari-bant" role="alert">⚠ Bu menüde alerjenlerinizi içeren
+        ${m.uyarili_yemek_sayisi} yemek var. İşaretli yemeklere dikkat edin.</p>`;
+    } else if (m.kullanici_alerjenleri.length === 0) {
+      alerjenBilgi = `<p class="bildirim bildirim-bilgi uyari-bant">Alerjenlerinizi <a href="/profil.html">Profil</a>
+        sayfasından seçerseniz bunları içeren yemekler burada işaretlenir.</p>`;
+    } else {
+      alerjenBilgi = `<p class="bildirim bildirim-basari uyari-bant">Bu menüde alerjenlerinizi
+        (${esc(m.kullanici_alerjenleri.map((a) => a.ad).join(', '))}) içeren yemek yok.</p>`;
+    }
+    const yarim = m.yarim_fiyat !== null
+      ? `<small>yarım porsiyon ${para(m.yarim_fiyat)}</small>`
+      : '<small>yarım porsiyon yok</small>';
+
     return `
+      ${alerjenBilgi}
       <article class="fis">
         <header class="fis-ust">
           <div>
             <p class="fis-ogun">${esc(m.ogun)}</p>
             <p class="fis-tarih">${esc(tarihYaz(m.tarih))} · ${esc(m.yemekhane)}</p>
           </div>
-          <p class="fis-fiyat">${para(m.fiyat)}<small>${fiyatAciklama}</small></p>
+          <p class="fis-fiyat">${para(m.fiyat)}<small>${fiyatAciklama}</small>${yarim}</p>
         </header>
         ${ozet}
         <ul class="yemek-listesi">${yemekler}</ul>
