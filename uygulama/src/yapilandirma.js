@@ -12,6 +12,11 @@ module.exports = {
     sifre: process.env.DB_SIFRE || '',
   },
 
+  redis: {
+    host: process.env.REDIS_HOST || 'redis',
+    port: Number(process.env.REDIS_PORT || 6379),
+  },
+
   // Oturum 30 dakika; her istekte süre yenilenir
   oturumSuresiSn: 30 * 60,
   oturumCerezAdi: 'oturum',

@@ -1,7 +1,7 @@
 {
   "name": "yemekhane-uygulama",
   "version": "1.0.0",
-  "description": "Yemekhane Otomasyonu · Web API (Express)",
+  "description": "Yemekhane Otomasyonu · Web API (Express + MySQL + Redis)",
   "main": "src/sunucu.js",
   "private": true,
   "scripts": {
@@ -13,6 +13,7 @@
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "express": "^5.1.0",
+    "ioredis": "^5.4.2",
     "mysql2": "^3.14.0"
   }
 }

@@ -435,4 +435,243 @@ denemesi; yordamın "Bakiye yetersiz." mesajı kartın altında gösterilir.
 
 ## Aşama 3 · Redis
 
+Redis iki iş için kullanılır. Uygulama `ioredis` ile tek bir bağlantı açar
+(`src/redisIstemci.js`, adres `REDIS_HOST` / `REDIS_PORT` ortam değişkenlerinden).
+
+| Görev | Anahtar | Süre | Ne zaman silinir | Kod |
+|---|---|---|---|---|
+| Menü önbelleği | `menu:{yemekhane_id}:{tarih}:{ogun_id}` | menünün gününün 23:59:59'una kadar (`EXAT`) | yönetici o menüyü değiştirdiğinde | `src/onbellek/menuOnbellegi.js`, `src/servisler/menuServisi.js` |
+| Oturum | `oturum:{token}` | 30 dakika, her istekte yenilenir (`GETEX … EX 1800`) | çıkış yapıldığında | `src/oturum/oturumDeposu.js` |
+
+Doğrulama komutlarının tamamı `rapor/asama3-dogrulama.sh` ile çalıştırıldı; ham çıktı
+`rapor/asama3-cikti.txt` dosyasındadır.
+
+### 3.1 Menü önbelleği
+
+Günün menüsü isteği (`GET /api/menu`) önce Redis'e bakar; kayıt yoksa menüyü replikadan okur,
+Redis'e yazar ve döner (cache-aside):
+
+```js
+// src/servisler/menuServisi.js
+async function menuGetir(yemekhaneId, tarih, ogunId) {
+  const anahtar = menuOnbellegi.anahtar(yemekhaneId, tarih, ogunId);   // menu:1:2026-11-21:2
+
+  const onbellekte = await menuOnbellegi.oku(anahtar);
+  if (onbellekte) {
+    console.log(`[onbellek] Redis'ten geldi: ${anahtar}`);
+    return onbellekte;
+  }
+
+  console.log(`[onbellek] Redis'te yok, veritabanından okunuyor: ${anahtar}`);
+  const menu = menuOlustur(await menuDeposu.menuDetaySatirlari(yemekhaneId, tarih, ogunId));
+  if (menu) await menuOnbellegi.yaz(anahtar, menu);
+  return menu;
+}
+```
+
+Tasarım kararları:
+
+* **Önbelleğe her iki fiyat da yazılır** (`ogrenci_fiyati`, `personel_fiyati`); kullanıcının rolüne
+  göre fiyat önbellekten *sonra* seçilir. Böylece öğrenci ve personel aynı anahtarı paylaşır.
+* **Süre `EXAT` ile verilir:** `SET anahtar değer EXAT <menünün tarihi 23:59:59>`. Menü o günden
+  sonra rezervasyona kapandığı için önbellekte tutmanın anlamı kalmaz. Tarihi geçmiş menüler
+  önbelleğe hiç yazılmaz.
+* **Doluluk önbelleğe alınmaz.** Boş yer her rezervasyonda değiştiği için haftalık menü ekranı
+  doluluğu her seferinde replikadan okur; önbellekte yalnızca yönetici değiştirmedikçe sabit kalan
+  menü içeriği durur.
+* **Redis yalnızca hızlandırıcıdır:** Redis'e ulaşılamazsa hata günlüğe yazılır ve menü
+  veritabanından okunur; kullanıcı hata görmez.
+
+**İlk istek veritabanından, ikincisi Redis'ten geliyor:**
+
+```
+$ docker compose exec -T redis redis-cli DEL menu:1:2026-11-21:2
+1
+$ curl … 'http://localhost:8080/api/menu?yemekhane=1&tarih=2026-11-21&ogun=2'
+HTTP 200
+$ curl … 'http://localhost:8080/api/menu?yemekhane=1&tarih=2026-11-21&ogun=2'
+HTTP 200
+
+$ docker compose logs --no-color --since 2026-11-21T11:24:09Z uygulama | grep -av '\[sql'
+uygulama-1  | POST /api/oturum -> 200 (79 ms)
+uygulama-1  | [onbellek] Redis'te yok, veritabanından okunuyor: menu:1:2026-11-21:2
+uygulama-1  | GET /api/menu?yemekhane=1&tarih=2026-11-21&ogun=2 -> 200 (7 ms)
+uygulama-1  | [onbellek] Redis'ten geldi: menu:1:2026-11-21:2
+uygulama-1  | GET /api/menu?yemekhane=1&tarih=2026-11-21&ogun=2 -> 200 (2 ms)
+```
+
+İlk istek 7 ms'de (veritabanı), ikincisi 2 ms'de (Redis) yanıtlanmıştır.
+
+**Önbellekteki kayıt ve süresi:**
+
+```
+$ docker compose exec -T redis redis-cli --scan --pattern 'menu:*'
+menu:1:2026-11-21:2
+
+$ docker compose exec -T redis redis-cli TTL menu:1:2026-11-21:2
+34546
+
+$ docker compose exec -T redis redis-cli EXPIRETIME menu:1:2026-11-21:2
+1795294799
+
+$ date -d @$(docker compose exec -T redis redis-cli EXPIRETIME menu:1:2026-11-21:2) '+%Y-%m-%d %H:%M:%S'
+2026-11-21 23:59:59
+
+$ docker compose exec -T redis redis-cli GET menu:1:2026-11-21:2 | cut -c1-300
+{"menu_id":62,"tarih":"2026-11-21","yemekhane_id":1,"yemekhane":"Merkez Yemekhane","ogun_id":2,
+ "ogun":"Öğle","rezervasyon_son":"2026-11-21 10:00:00","ogrenci_fiyati":40,"personel_fiyati":90,
+ "toplam_kalori":1240,"tumu_vejetaryen":false,"yemekler":[{"id":3,"ad":"Tarhana Çorbası", …
+```
+
+Komut 14:24:13'te çalıştırılmıştır; 34 546 saniye = 9 sa 35 dk 46 sn, yani kayıt tam olarak bugün
+23:59:59'da silinecektir.
+
+### 3.2 Menü güncellenince önbelleğin silinmesi
+
+Yönetici panelinde bir menü güncellenince (`PUT /api/yonetim/menuler/:id`) veritabanı
+transaction'ı commit edildikten sonra o menünün anahtarı silinir:
+
+```js
+// src/servisler/yonetimServisi.js
+menu = await yonetimDeposu.menuGuncelle(menuId, veri);          // kaynakta, tek transaction
+if (!menu) throw new UygulamaHatasi(404, 'Menü bulunamadı.');
+await menuOnbellegi.sil(menuOnbellegi.anahtar(menu.yemekhane_id, menu.tarih, menu.ogun_id));
+
+// src/onbellek/menuOnbellegi.js
+async function sil(menuAnahtari) {
+  await istemci.del(menuAnahtari);
+  setTimeout(() => istemci.del(menuAnahtari).catch(() => {}), 1000).unref();
+}
+```
+
+**Neden 1 saniye sonra ikinci kez silinir?** Güncelleme kaynağa yazılır, önbellek dolduran okuma ise
+replikadan yapılır. Silme ile replikanın güncellenmesi arasındaki kısa aralıkta (replikasyon
+gecikmesi, bkz. 2.5) bir kullanıcı menüyü isterse uygulama replikadaki **eski** menüyü okuyup
+önbelleğe yazabilir ve eski menü gün sonuna kadar orada kalırdı. Kısa bir gecikmeyle yapılan ikinci
+silme ("delayed double delete") bu ihtimali kapatır.
+
+**Doğrulama:** öğrenci fiyatı 40 TL iken yönetici 45 TL yapar, anahtar silinir, sonraki istek
+veritabanından gelir ve yeni fiyatı gösterir:
+
+```
+# Öğrencinin gördüğü fiyat (önbellekten)
+$ curl -s -b /tmp/yemekhane-ogrenci.jar '…/api/menu?yemekhane=1&tarih=2026-11-21&ogun=2' | grep -o '"fiyat":[0-9.]*'
+"fiyat":40
+
+# Yönetici öğrenci fiyatını 40 -> 45 TL yapar
+$ curl -s -w ' HTTP %{http_code}\n' -b /tmp/yemekhane-yonetici.jar -X PUT -H 'Content-Type: application/json' \
+    -d '{"ogrenci_fiyati":45,"personel_fiyati":90,"yemek_idler":[3,11,21,40]}' http://localhost:8080/api/yonetim/menuler/62
+{"menu_id":62} HTTP 200
+
+$ docker compose exec -T redis redis-cli EXISTS menu:1:2026-11-21:2
+0
+
+# Öğrenci yeni fiyatı görür
+$ curl -s -b /tmp/yemekhane-ogrenci.jar '…/api/menu?yemekhane=1&tarih=2026-11-21&ogun=2' | grep -o '"fiyat":[0-9.]*'
+"fiyat":45
+
+$ docker compose logs --no-color --since 2026-11-21T11:24:14Z uygulama | grep -av '\[sql'
+uygulama-1  | [onbellek] Redis'ten geldi: menu:1:2026-11-21:2
+uygulama-1  | GET /api/menu?yemekhane=1&tarih=2026-11-21&ogun=2 -> 200 (4 ms)
+uygulama-1  | [onbellek] silindi: menu:1:2026-11-21:2 (menü değişti)
+uygulama-1  | PUT /api/yonetim/menuler/62 -> 200 (22 ms)
+uygulama-1  | [onbellek] Redis'te yok, veritabanından okunuyor: menu:1:2026-11-21:2
+uygulama-1  | GET /api/menu?yemekhane=1&tarih=2026-11-21&ogun=2 -> 200 (7 ms)
+
+$ docker compose exec -T redis redis-cli EXISTS menu:1:2026-11-21:2
+1
+```
+
+Ardından fiyat yine panelden 40 TL'ye geri alınmış ve anahtar bir kez daha silinmiştir
+(`EXISTS` → `0`). Arayüzde de aynı şey görülür: yönetici panelinden fiyat değiştirildikten sonra
+öğrencinin Günün Menüsü ekranı yenilendiğinde yeni fiyat görünür.
+
+### 3.3 Oturum Redis'te
+
+Aşama 2'de oturumlar uygulamanın belleğindeki bir `Map`'te tutuluyordu; uygulama yeniden başlayınca
+herkes oturumdan düşüyordu. Aşama 3'te `src/oturum/oturumDeposu.js` aynı üç fonksiyonla
+(`olustur`, `getir`, `sil`) Redis'e taşındı; uygulamanın geri kalanında hiçbir şey değişmedi.
+
+```js
+// src/oturum/oturumDeposu.js
+async function olustur(kullanici) {
+  const token = crypto.randomBytes(32).toString('hex');                 // 64 hex karakter
+  await istemci.set(`oturum:${token}`, JSON.stringify(kullanici), 'EX', 1800);
+  return token;
+}
+
+// Okuma ile süre yenilemeyi tek komutta (atomik) yapar: kayan 30 dakika
+async function getir(token) {
+  if (!/^[a-f0-9]{64}$/.test(token)) return null;
+  const deger = await istemci.getex(`oturum:${token}`, 'EX', 1800);
+  return deger ? JSON.parse(deger) : null;
+}
+
+async function sil(token) {
+  await istemci.del(`oturum:${token}`);
+}
+```
+
+Token tarayıcıda `HttpOnly` + `SameSite=Strict` çerezde durur; her korumalı istekte `girisGerekli`
+middleware'i `getir()`'i çağırdığı için süre her istekte 1800 saniyeye döner.
+
+**Anahtar, değer ve kayan süre:**
+
+```
+$ docker compose exec -T redis redis-cli GET oturum:8564bdc4…0525d
+{"id":7,"ad":"Mehmet","soyad":"Yıldız","eposta":"mehmet.yildiz@ogr.kampus.edu.tr","rol":"ogrenci"}
+
+$ docker compose exec -T redis redis-cli TTL oturum:8564bdc4…0525d
+1797
+# 5 saniye beklenir
+$ docker compose exec -T redis redis-cli TTL oturum:8564bdc4…0525d
+1791
+# Oturumlu bir istek yapılır
+$ curl -s -o /dev/null -w 'HTTP %{http_code}\n' -b /tmp/yemekhane-ogrenci.jar http://localhost:8080/api/ben
+HTTP 200
+$ docker compose exec -T redis redis-cli TTL oturum:8564bdc4…0525d
+1799
+```
+
+**Uygulama container'ı yeniden başlasa da oturum düşmüyor:**
+
+```
+$ docker compose restart uygulama
+ Container yemekhane-uygulama-1 Restarting
+ Container yemekhane-uygulama-1 Started
+
+$ docker compose ps uygulama
+NAME                   SERVICE    STATUS
+yemekhane-uygulama-1   uygulama   Up 6 seconds (healthy)
+
+# Aynı çerezle, yeniden giriş yapmadan:
+$ curl -s -w ' HTTP %{http_code}\n' -b /tmp/yemekhane-ogrenci.jar http://localhost:8080/api/ben
+{"kullanici":{"id":7,"ad":"Mehmet","soyad":"Yıldız","eposta":"mehmet.yildiz@ogr.kampus.edu.tr","rol":"ogrenci","bakiye":1005}} HTTP 200
+
+$ docker compose logs --no-color --since 2026-11-21T11:24:27Z uygulama | grep -av '\[sql'
+uygulama-1  | GET /api/ben -> 200 (3 ms)
+uygulama-1  | GET /api/ben -> 200 (4 ms)
+uygulama-1  | SIGTERM alındı, kapanıyor
+uygulama-1  | Yemekhane API 8000 portunda çalışıyor
+uygulama-1  | Yazma: mysql-primary  Okuma: mysql-replica  Redis: redis
+uygulama-1  | [redis] redis:6379 bağlantısı kuruldu
+uygulama-1  | GET /api/ben -> 200 (18 ms)
+```
+
+Günlükte süreç kapanıp yeniden başlamış, ardından gelen istek yine `200` almıştır; oturum
+uygulamanın belleğinde değil Redis'te olduğu için kaybolmamıştır. (Uygulama `SIGTERM`'i yakalayıp
+bağlantıları düzgün kapatır; böylece `docker compose restart` 10 saniyelik zorla kapatma süresini
+beklemez.)
+
+**Çıkışta oturum anahtarı silinir:**
+
+```
+$ curl -s -o /dev/null -w 'HTTP %{http_code}\n' -b /tmp/yemekhane-ogrenci.jar -X DELETE http://localhost:8080/api/oturum
+HTTP 204
+$ docker compose exec -T redis redis-cli EXISTS oturum:8564bdc4…0525d
+0
+$ curl -s -w ' HTTP %{http_code}\n' -b /tmp/yemekhane-ogrenci.jar http://localhost:8080/api/ben
+{"hata":"Oturum açmanız gerekiyor."} HTTP 401
+```
+
 ## Aşama 4 · Değişiklik talebi

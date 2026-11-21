@@ -1,5 +1,6 @@
 // Yönetici paneli iş kuralları: menü girdisinin denetimi ve kayıt.
 const yonetimDeposu = require('../veri/yonetimDeposu');
+const menuOnbellegi = require('../onbellek/menuOnbellegi');
 const { UygulamaHatasi } = require('../hatalar');
 const { MYSQL_TEKRAR_KAYIT } = require('../ara/hataYakala');
 const dogrula = require('../denetleyiciler/dogrula');
@@ -40,6 +41,8 @@ async function menuOlustur(govde = {}) {
   };
   try {
     const menuId = await yonetimDeposu.menuOlustur(veri);
+    // Bu anahtar için önbellekte bir şey olmamalı; yine de garanti olsun diye silinir
+    await menuOnbellegi.sil(menuOnbellegi.anahtar(veri.yemekhane_id, veri.tarih, veri.ogun_id));
     return { menu_id: menuId };
   } catch (hata) {
     if (hata.errno === MYSQL_TEKRAR_KAYIT) {
@@ -62,6 +65,8 @@ async function menuGuncelle(menuId, govde = {}) {
     throw yabanciAnahtarHatasi(hata);
   }
   if (!menu) throw new UygulamaHatasi(404, 'Menü bulunamadı.');
+  // Menü değişti: önbellekteki eski kayıt silinir, sonraki istek yeni menüyü okur
+  await menuOnbellegi.sil(menuOnbellegi.anahtar(menu.yemekhane_id, menu.tarih, menu.ogun_id));
   return { menu_id: menuId };
 }
 

@@ -1,34 +1,36 @@
 // =====================================================================
-// Oturum deposu · Aşama 2: uygulamanın belleğinde (Map)
-// Dezavantajı: uygulama container'ı yeniden başlarsa tüm oturumlar düşer.
-// Aşama 3'te aynı fonksiyonlar Redis ile yeniden yazılacak; uygulamanın
-// geri kalanı değişmeyecek.
+// Oturum deposu · Aşama 3: Redis
+//   Anahtar : oturum:{token}
+//   Değer   : oturumdaki kullanıcı (JSON)
+//   Süre    : 30 dakika, her istekte yenilenir (kayan süre)
+//   Silinme : çıkış yapıldığında
+// Oturum uygulamanın belleğinde değil Redis'te tutulduğu için uygulama
+// container'ı yeniden başlasa da kullanıcı oturumdan düşmez.
+// (Aşama 2'de burada bir Map vardı; fonksiyon imzaları aynı kaldı.)
 // =====================================================================
 const crypto = require('crypto');
 const ayar = require('../yapilandirma');
+const istemci = require('../redisIstemci');
 
-const oturumlar = new Map();   // token -> { kullanici, bitis }
+const anahtar = (token) => `oturum:${token}`;
+const TOKEN_BICIMI = /^[a-f0-9]{64}$/;
 
 async function olustur(kullanici) {
   const token = crypto.randomBytes(32).toString('hex');
-  oturumlar.set(token, { kullanici, bitis: Date.now() + ayar.oturumSuresiSn * 1000 });
+  await istemci.set(anahtar(token), JSON.stringify(kullanici), 'EX', ayar.oturumSuresiSn);
   return token;
 }
 
-// Oturumu getirir ve süresini 30 dakika uzatır (kayan süre).
+// Oturumu getirir ve süresini yeniden 30 dakikaya çeker.
+// GETEX okuma ile süre yenilemeyi tek komutta (atomik) yapar.
 async function getir(token) {
-  const kayit = oturumlar.get(token);
-  if (!kayit) return null;
-  if (kayit.bitis < Date.now()) {
-    oturumlar.delete(token);
-    return null;
-  }
-  kayit.bitis = Date.now() + ayar.oturumSuresiSn * 1000;
-  return kayit.kullanici;
+  if (!TOKEN_BICIMI.test(token)) return null;
+  const deger = await istemci.getex(anahtar(token), 'EX', ayar.oturumSuresiSn);
+  return deger ? JSON.parse(deger) : null;
 }
 
 async function sil(token) {
-  oturumlar.delete(token);
+  await istemci.del(anahtar(token));
 }
 
 module.exports = { olustur, getir, sil };

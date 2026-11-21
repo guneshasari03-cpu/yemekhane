@@ -1,6 +1,7 @@
 // Menü iş kuralları: satırları tek bir menü nesnesine çevirme, toplam kalori,
-// kullanıcının rolüne göre fiyat. (Aşama 3'te önbellek de buraya eklenecek.)
+// kullanıcının rolüne göre fiyat ve Redis önbelleği.
 const menuDeposu = require('../veri/menuDeposu');
+const menuOnbellegi = require('../onbellek/menuOnbellegi');
 
 function virgulluListe(metin) {
   return metin ? metin.split(', ') : [];
@@ -39,9 +40,21 @@ function menuOlustur(satirlar) {
   };
 }
 
+// Önce Redis'e bakılır; yoksa replikadan okunup Redis'e yazılır.
+// Önbellekteki menü her iki fiyatı da içerir, rol fiyatı sonra seçilir.
 async function menuGetir(yemekhaneId, tarih, ogunId) {
-  const satirlar = await menuDeposu.menuDetaySatirlari(yemekhaneId, tarih, ogunId);
-  return menuOlustur(satirlar);
+  const anahtar = menuOnbellegi.anahtar(yemekhaneId, tarih, ogunId);
+
+  const onbellekte = await menuOnbellegi.oku(anahtar);
+  if (onbellekte) {
+    console.log(`[onbellek] Redis'ten geldi: ${anahtar}`);
+    return onbellekte;
+  }
+
+  console.log(`[onbellek] Redis'te yok, veritabanından okunuyor: ${anahtar}`);
+  const menu = menuOlustur(await menuDeposu.menuDetaySatirlari(yemekhaneId, tarih, ogunId));
+  if (menu) await menuOnbellegi.yaz(anahtar, menu);
+  return menu;
 }
 
 // Öğrenci öğrenci fiyatını, personel ve yönetici personel fiyatını öder.
