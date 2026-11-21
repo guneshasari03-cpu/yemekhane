@@ -1,13 +1,31 @@
 # Yemekhane Otomasyonu · Dönem Ödevi Raporu
 
-**Ders:** Web Teknolojileri
-**Öğrenci:** Hasari Güneş · ÖĞRENCİ NO
-**Depo:** https://github.com/guneshasari03-cpu/yemekhane
+| | |
+|---|---|
+| **Ders** | Web Teknolojileri · Burak Yılmaz |
+| **Öğrenci** | Hasari Güneş · 241229066 |
+| **Depo** | https://github.com/guneshasari03-cpu/yemekhane |
+| **Aşama etiketleri** | `asama-1` · `asama-2` · `asama-3` · `asama-4` |
+| **Çalıştırma** | Depo kökünde `docker compose up -d` → http://localhost:8080 |
 
 **Seçilen mimari: Web API + arayüz.**
 Uygulama Node.js 22 + Express ile yazılmıştır ve yalnızca JSON döner. HTML5 + CSS3 arayüz
 `frontend/` klasöründe durur, Apache tarafından sunulur ve veriyi JavaScript `fetch` ile alır.
 Apache `/api/` isteklerini `uygulama` servisine (port 8000) iletir.
+
+**İçindekiler**
+
+1. Aşama 1 · Altyapı: compose, replikasyonun dört doğrulaması
+2. Aşama 2 · Uygulama: katmanlar, bir isteğin yolu, stored procedure'ler, okuma/yazma ayrımı, replikasyon gecikmesi, yedi ekran
+3. Aşama 3 · Redis: menü önbelleği ve geçersizleştirme, Redis'te oturum
+4. Aşama 4 · Değişiklik talebi: migration, replikaya geçiş, yarım porsiyon, alerjen uyarısı, Redis temizliği
+
+| Aşama | Doğrulama betiği | Ham çıktı |
+|---|---|---|
+| 1 | `rapor/asama1-dogrulama.sh` | `rapor/asama1-cikti.txt` |
+| 2 | (uygulama günlüğü) | `rapor/asama2-gunluk.txt` |
+| 3 | `rapor/asama3-dogrulama.sh` | `rapor/asama3-cikti.txt` |
+| 4 | `rapor/asama4-dogrulama.sh` | `rapor/asama4-cikti.txt` |
 
 ---
 
@@ -61,8 +79,9 @@ $ docker compose exec -T mysql-replica mysql --default-character-set=utf8mb4 -ur
                Last_SQL_Error:
 ```
 
-Apache de `http://localhost:8080` adresinde başlangıç sayfasını sunmaktadır (uygulama servisi
-henüz eklenmediği için sayfa "Uygulama servisine ulaşılamıyor" uyarısını gösterir):
+Apache de `http://localhost:8080` adresinde başlangıç paketinin sayfasını sunmaktadır
+(sayfadaki servis tablosu; uygulama servisi henüz eklenmediği için sayfa ayrıca "Uygulama
+servisine ulaşılamıyor" uyarısı gösterir):
 
 ![localhost:8080](ekran/asama1-tarayici.png)
 
